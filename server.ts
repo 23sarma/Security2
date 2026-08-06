@@ -232,8 +232,8 @@ async function generateContentWithFallback(options: {
         httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
       });
 
-      // Official Gemini API Models (trying fast & standard aliases with automatic multi-model rotation)
-      const modelsToTry = ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-3.6-flash', 'gemini-flash-latest'];
+      // Official Gemini API Models
+      const modelsToTry = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
 
       for (const model of modelsToTry) {
         try {
@@ -254,12 +254,30 @@ async function generateContentWithFallback(options: {
           }
         } catch (err: any) {
           const errMsg = err?.message || String(err);
-          if (errMsg.includes('429') || errMsg.includes('RESOURCE_EXHAUSTED') || errMsg.includes('quota')) {
-            console.log(`[GEMINI MODEL INFO] Model ${model} rate/quota limit reached, trying next model fallback...`);
-          } else {
-            console.warn(`[GEMINI MODEL NOTICE] Model ${model} unavailable (${errMsg.slice(0, 100)}), trying next model...`);
+          console.warn(`[GEMINI MODEL NOTICE] Model ${model} notice (${errMsg.slice(0, 100)}), trying next model...`);
+        }
+      }
+
+      // Direct REST API Fallback to Google Gemini API
+      try {
+        const restRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${activeApiKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: formattedContents,
+            systemInstruction: options.systemInstruction ? { parts: [{ text: options.systemInstruction }] } : undefined
+          })
+        });
+        if (restRes.ok) {
+          const restData = await restRes.json();
+          const text = restData?.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (text) {
+            console.log('[GEMINI REST FALLBACK SUCCESS] Direct REST API responded');
+            return text;
           }
         }
+      } catch (restErr) {
+        console.warn('Gemini REST API fallback failed:', restErr);
       }
     } catch (sdkInitErr: any) {
       console.error('[GEMINI SDK INIT ERROR]:', sdkInitErr?.message || sdkInitErr);

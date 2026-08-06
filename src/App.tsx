@@ -1081,6 +1081,8 @@ export default function App() {
     };
     setMemoryList(prev => [autoMemoryEntry, ...prev]);
 
+    const savedApiKey = localStorage.getItem('aegis_gemini_api_key');
+
     try {
       const res = await fetch('/api/chat', {
         method: 'POST',
@@ -1090,53 +1092,98 @@ export default function App() {
           history: messages,
           memoryContext: [autoMemoryEntry, ...memoryList],
           attachments: currentAttachments,
-          apiKey: localStorage.getItem('aegis_gemini_api_key') || undefined
+          apiKey: savedApiKey || undefined
         })
       });
 
-      const data = await res.json();
-      if (data && data.reply) {
-        const assistantMsg: ChatMessage = {
-          id: `ast-${Date.now()}`,
-          sender: 'assistant',
-          agentName: 'Aegis Core AI (Persistent Memory)',
-          content: data.reply,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        };
-        setMessages(prev => [...prev, assistantMsg]);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.reply) {
+          const assistantMsg: ChatMessage = {
+            id: `ast-${Date.now()}`,
+            sender: 'assistant',
+            agentName: 'Aegis Core AI (Live Online)',
+            content: data.reply,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          };
+          setMessages(prev => [...prev, assistantMsg]);
 
-        if (data.hasPendingGithubUpdate) {
-          setHasGithubUpdate(true);
-          if (data.updateDetails) {
-            setGithubUpdateDetails(data.updateDetails);
+          if (data.hasPendingGithubUpdate) {
+            setHasGithubUpdate(true);
+            if (data.updateDetails) {
+              setGithubUpdateDetails(data.updateDetails);
+            }
           }
+          setIsChatLoading(false);
+          scrollToBottom(true);
+          return;
         }
       }
     } catch (err) {
-      console.warn('Chat network resilience fallback triggered:', err);
-      // Zero-offline fallback response so AI never stops responding on Vercel or poor networks
-      const fallbackMsg: ChatMessage = {
-        id: `ast-resilient-${Date.now()}`,
-        sender: 'assistant',
-        agentName: 'Aegis Core AI (Autonomous Zero-Offline Mode)',
-        content: `Aapka instruction: **"${currentPrompt}"** receive ho gaya hai!
-
-⚡ **Zero-Offline Vercel Resilience Mode Active**: System bina kisi interruption ke continuous response de raha hai. Aapke GitHub repository aur live app ko automatically link karke sync kar diya gaya hai.
-
-New code changes ko live run karne ke liye screen ke top par bane **Update Now (Sync Code)** popup banner par click karein!`,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      };
-      setMessages(prev => [...prev, fallbackMsg]);
-      setHasGithubUpdate(true);
-      setGithubUpdateDetails({
-        message: `AI Code Rewrite: "${currentPrompt.slice(0, 50)}"`,
-        commitSha: Math.random().toString(36).substring(2, 8),
-        timestamp: new Date().toISOString()
-      });
-    } finally {
-      setIsChatLoading(false);
-      scrollToBottom(true);
+      console.warn('Backend API endpoint unreachable, attempting direct Google Gemini API call...', err);
     }
+
+    // Direct Client-Side Google Gemini Call Fallback (Works on Vercel & static hosting without backend)
+    if (savedApiKey && savedApiKey.trim().length > 5) {
+      try {
+        const formattedContents = messages.slice(-10).map(m => ({
+          role: m.sender === 'user' ? 'user' : 'model',
+          parts: [{ text: m.content }]
+        }));
+        formattedContents.push({
+          role: 'user',
+          parts: [{ text: currentPrompt }]
+        });
+
+        const geminiDirectRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${savedApiKey.trim()}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: formattedContents,
+            systemInstruction: {
+              parts: [{ text: "You are Aegis Core AI, an advanced AI assistant created for Master Lobish. Provide thorough, intelligent, and helpful responses in clear Hindustani/English." }]
+            }
+          })
+        });
+
+        if (geminiDirectRes.ok) {
+          const geminiData = await geminiDirectRes.json();
+          const aiText = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (aiText) {
+            const assistantMsg: ChatMessage = {
+              id: `ast-direct-${Date.now()}`,
+              sender: 'assistant',
+              agentName: 'Aegis Core AI (Direct Gemini Engine Online)',
+              content: aiText,
+              timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            };
+            setMessages(prev => [...prev, assistantMsg]);
+            setIsChatLoading(false);
+            scrollToBottom(true);
+            return;
+          }
+        } else {
+          const errBody = await geminiDirectRes.json().catch(() => ({}));
+          console.error('Direct Gemini API Call Error:', errBody);
+        }
+      } catch (directErr) {
+        console.error('Direct client Gemini API execution failed:', directErr);
+      }
+    }
+
+    // Fallback if no API key or network error occurs
+    const fallbackMsg: ChatMessage = {
+      id: `ast-resilient-${Date.now()}`,
+      sender: 'assistant',
+      agentName: 'Aegis Core AI (Setup Needed)',
+      content: savedApiKey 
+        ? `⚠️ Gemini API call attempt failed. Please ensure your Google Gemini API Key is active and unrestricted.`
+        : `🔑 Google Gemini API Key required! Click the key icon at top to paste your Gemini API Key and get real-time AI responses!`,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+    setMessages(prev => [...prev, fallbackMsg]);
+    setIsChatLoading(false);
+    scrollToBottom(true);
   };
 
   // Add Custom Permanent Memory Directive
