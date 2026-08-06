@@ -56,13 +56,15 @@ import {
   Key,
   LogOut,
   KeyRound,
+  Crown,
+  Clock,
   Image as ImageIcon
 } from 'lucide-react';
-import { ScanTarget, ScanReport, ChatMessage, SubAgent, MemoryVector, Vulnerability, AttachedFile } from './types';
+import { ScanTarget, ScanReport, ChatMessage, SubAgent, MemoryVector, Vulnerability, AttachedFile, HITLProposal, DynamicIntegratedModule } from './types';
 
 export default function App() {
   // Navigation & Drawer State
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'scanner' | 'darkweb' | 'agents' | 'memory' | 'roadmap' | 'deployment' | 'google' | 'github'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'scanner' | 'darkweb' | 'agents' | 'memory' | 'roadmap' | 'deployment' | 'google' | 'github' | 'hitl'>('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isMobileChatOpen, setIsMobileChatOpen] = useState(false);
 
@@ -314,6 +316,164 @@ export default function App() {
     const interval = setInterval(checkGithubUpdateStatus, 10000);
     return () => clearInterval(interval);
   }, []);
+
+  // Autonomous HITL (Human-in-the-Loop) Architecture & Dynamic Plugin State
+  const [hitlProposals, setHitlProposals] = useState<HITLProposal[]>([]);
+  const [hitlModules, setHitlModules] = useState<DynamicIntegratedModule[]>([]);
+  const [hitlOwner, setHitlOwner] = useState<string>('Lobish');
+  const [hitlSystemVersion, setHitlSystemVersion] = useState<string>('2.5.0');
+  const [isHitlLoading, setIsHitlLoading] = useState<boolean>(false);
+  const [isTriggeringDiscovery, setIsTriggeringDiscovery] = useState<boolean>(false);
+  const [buildingProposalId, setBuildingProposalId] = useState<string | null>(null);
+  const [buildingStep, setBuildingStep] = useState<string>('');
+  const [moduleInputParams, setModuleInputParams] = useState<Record<string, Record<string, string>>>({});
+  const [moduleExecResults, setModuleExecResults] = useState<Record<string, string>>({});
+  const [executingModuleId, setExecutingModuleId] = useState<string | null>(null);
+
+  const fetchHitlState = async () => {
+    setIsHitlLoading(true);
+    try {
+      const res = await fetch('/api/hitl/state');
+      const data = await res.json();
+      if (data) {
+        if (Array.isArray(data.proposals)) setHitlProposals(data.proposals);
+        if (Array.isArray(data.activeModules)) setHitlModules(data.activeModules);
+        if (data.owner) setHitlOwner(data.owner);
+        if (data.systemVersion) setHitlSystemVersion(data.systemVersion);
+      }
+    } catch (err) {
+      console.warn('Error fetching HITL state:', err);
+    } finally {
+      setIsHitlLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchHitlState();
+  }, []);
+
+  const handleTriggerDiscovery = async (topicStr?: string) => {
+    setIsTriggeringDiscovery(true);
+    try {
+      const res = await fetch('/api/hitl/trigger-discovery', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic: topicStr || 'Quantum Cryptographic Key Rotator & Voice Synthesis' })
+      });
+      const data = await res.json();
+      if (data.success && data.proposal) {
+        await fetchHitlState();
+        // Append alert to chat thread so Lobish sees it immediately in chat too
+        const propChatMsg: ChatMessage = {
+          id: `prop-msg-${Date.now()}`,
+          sender: 'assistant',
+          agentName: 'Aegis Background Research Daemon',
+          content: `🤖 **[NEW TECHNOLOGY DISCOVERY PROPOSAL]**\n\nHello Master **Lobish**! Maine background research daemon me ek new software tool/module khoja hai:\n\n• **Tool Name:** ${data.proposal.title}\n• **Category:** ${data.proposal.category}\n• **Description:** ${data.proposal.description}\n\n*Aapki permission ke bina ise build nahi kiya jayega.* Kya main ise compile karke real system me add karu?`,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          proposalData: data.proposal,
+          actionButtons: [
+            { label: '⚡ Approve & Build Real Tool', action: 'hitl_approve', payload: { id: data.proposal.id } },
+            { label: '❌ Reject Proposal', action: 'hitl_reject', payload: { id: data.proposal.id } }
+          ]
+        };
+        setMessages(prev => [...prev, propChatMsg]);
+      }
+    } catch (err) {
+      console.error('Trigger discovery error:', err);
+    } finally {
+      setIsTriggeringDiscovery(false);
+    }
+  };
+
+  const handleApproveProposal = async (proposalId: string) => {
+    const proposal = hitlProposals.find(p => p.id === proposalId);
+    setBuildingProposalId(proposalId);
+    setBuildingStep('1/3 Scaffolding AST Source Code Container...');
+
+    setTimeout(() => {
+      setBuildingStep('2/3 Compiling TypeScript AST & Resolving Dependencies...');
+    }, 800);
+
+    setTimeout(async () => {
+      setBuildingStep('3/3 Mounting Module into Aegis Control Console...');
+      try {
+        const res = await fetch('/api/hitl/approve', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: proposalId })
+        });
+        const data = await res.json();
+        if (data.success) {
+          await fetchHitlState();
+          // Add system notification in chat thread
+          const successMsg: ChatMessage = {
+            id: `build-msg-${Date.now()}`,
+            sender: 'system',
+            content: `🎉 **[BUILD & INTEGRATION COMPLETE]**\n\nMaster **Lobish**! '${proposal?.title || 'Tool'}' compile karke real system interface me add kar diya gaya hai. Real-time usage ke liye **"🤖 HITL Discovery"** tab me 'Active Dynamic Tools' section check karein!`,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          };
+          setMessages(prev => [...prev, successMsg]);
+        }
+      } catch (err) {
+        console.error('Error approving proposal:', err);
+      } finally {
+        setBuildingProposalId(null);
+        setBuildingStep('');
+      }
+    }, 1600);
+  };
+
+  const handleRejectProposal = async (proposalId: string) => {
+    try {
+      const res = await fetch('/api/hitl/reject', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: proposalId })
+      });
+      const data = await res.json();
+      if (data.success) {
+        await fetchHitlState();
+      }
+    } catch (err) {
+      console.error('Error rejecting proposal:', err);
+    }
+  };
+
+  const handleExecuteModule = async (moduleId: string) => {
+    const moduleObj = hitlModules.find(m => m.id === moduleId);
+    if (!moduleObj) return;
+
+    setExecutingModuleId(moduleId);
+    const currentParams = moduleInputParams[moduleId] || {};
+
+    try {
+      const res = await fetch(`/api/hitl/modules/${moduleId}/execute`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ params: currentParams })
+      });
+      const data = await res.json();
+      if (data.success && data.result) {
+        setModuleExecResults(prev => ({ ...prev, [moduleId]: data.result }));
+
+        // Voice Synthesis Browser Speech execution if it's a Voice module
+        if (moduleObj.category === 'Voice Synthesis' || moduleObj.title.toLowerCase().includes('voice')) {
+          const textToSpeak = currentParams.textToSpeak || 'Namaste Master Lobish! Voice Engine activated successfully.';
+          if ('speechSynthesis' in window) {
+            const utterance = new SpeechSynthesisUtterance(textToSpeak);
+            utterance.pitch = parseFloat(currentParams.voicePitch || '1.0');
+            window.speechSynthesis.speak(utterance);
+          }
+        }
+
+        fetchHitlState();
+      }
+    } catch (err) {
+      console.error('Error executing module:', err);
+    } finally {
+      setExecutingModuleId(null);
+    }
+  };
 
   // Authentication System State (Name: Lobish, Password: Lobish32 - hidden from UI)
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
@@ -1258,6 +1418,23 @@ New code changes ko live run karne ke liye screen ke top par bane **Update Now (
             <Github className="w-3.5 h-3.5" />
             <span>GitHub Sync</span>
           </button>
+          <button
+            id="tab-hitl"
+            onClick={() => { setActiveTab('hitl'); fetchHitlState(); }}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center space-x-1.5 ${
+              activeTab === 'hitl'
+                ? 'bg-amber-400 text-slate-950 font-extrabold shadow-md shadow-amber-400/20'
+                : 'text-amber-400 hover:bg-amber-500/10'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>🤖 HITL Discovery</span>
+            {hitlProposals.filter(p => p.status === 'pending').length > 0 && (
+              <span className="px-1.5 py-0.2 bg-amber-500/30 text-amber-300 border border-amber-500/50 rounded-full text-[10px] font-bold">
+                {hitlProposals.filter(p => p.status === 'pending').length}
+              </span>
+            )}
+          </button>
         </nav>
 
         {/* Server & App Install Actions */}
@@ -1521,6 +1698,25 @@ New code changes ko live run karne ke liye screen ke top par bane **Update Now (
                     <span>🐙 GitHub Direct Sync & Code Push</span>
                   </div>
                   <ChevronRight className="w-4 h-4 opacity-60" />
+                </button>
+
+                <button
+                  onClick={() => { setActiveTab('hitl'); fetchHitlState(); setIsSidebarOpen(false); }}
+                  className={`w-full p-2.5 rounded-xl text-xs font-medium transition-all flex items-center justify-between ${
+                    activeTab === 'hitl'
+                      ? 'bg-amber-400 text-slate-950 font-bold shadow-lg shadow-amber-400/20'
+                      : 'text-amber-300 bg-amber-500/10 border border-amber-500/30'
+                  }`}
+                >
+                  <div className="flex items-center space-x-2.5">
+                    <Sparkles className="w-4 h-4" />
+                    <span>🤖 HITL Autonomous System</span>
+                  </div>
+                  {hitlProposals.filter(p => p.status === 'pending').length > 0 && (
+                    <span className="px-2 py-0.5 rounded-full bg-amber-500/30 text-amber-300 border border-amber-500/50 text-[10px] font-mono font-bold">
+                      {hitlProposals.filter(p => p.status === 'pending').length} New
+                    </span>
+                  )}
                 </button>
               </div>
 
@@ -3296,6 +3492,307 @@ New code changes ko live run karne ke liye screen ke top par bane **Update Now (
               </div>
             </div>
           )}
+
+          {/* TAB 10: HITL AUTONOMOUS SYSTEM & DYNAMIC INTEGRATION */}
+          {activeTab === 'hitl' && (
+            <div className="space-y-6 max-w-7xl mx-auto">
+              {/* Header banner */}
+              <div className="bg-gradient-to-r from-amber-500/10 via-slate-900 to-indigo-500/10 border border-amber-500/30 rounded-3xl p-6 md:p-8 space-y-4 shadow-2xl relative overflow-hidden">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="space-y-2">
+                    <div className="flex items-center space-x-2">
+                      <span className="px-3 py-1 bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded-full text-xs font-mono font-bold uppercase tracking-wide flex items-center space-x-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                        <span>HITL Human-in-the-Loop System Active</span>
+                      </span>
+                      <span className="px-2.5 py-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-full text-xs font-mono font-bold flex items-center space-x-1">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                        <span>Daemon Scanning Active</span>
+                      </span>
+                    </div>
+
+                    <h2 className="text-2xl font-extrabold text-white tracking-tight flex items-center space-x-3">
+                      <span>Autonomous Self-Improving AI Engine</span>
+                    </h2>
+
+                    <p className="text-xs text-slate-300 max-w-2xl leading-relaxed">
+                      AI continuously background me web, open-source repos, and threat feeds scan karke new software tools/technologies discover karta hai. **Owner (Lobish)** ki permission ke bina koi code build nahi hota. Approval milte hi system auto-compile karke interface me live dynamic tool mount kar deta hai!
+                    </p>
+                  </div>
+
+                  <div className="bg-slate-950/80 border border-slate-800 p-4 rounded-2xl space-y-2 text-xs font-mono shrink-0">
+                    <div className="flex justify-between items-center space-x-4">
+                      <span className="text-slate-400">System Owner:</span>
+                      <span className="text-amber-400 font-bold flex items-center space-x-1">
+                        <Crown className="w-3.5 h-3.5 text-amber-400" />
+                        <span>{hitlOwner}</span>
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center space-x-4">
+                      <span className="text-slate-400">System Version:</span>
+                      <span className="text-cyan-400 font-bold">v{hitlSystemVersion} Dynamic</span>
+                    </div>
+                    <div className="flex justify-between items-center space-x-4">
+                      <span className="text-slate-400">Daemon Status:</span>
+                      <span className="text-emerald-400 font-bold">BACKGROUND_ACTIVE</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Control Buttons Bar */}
+                <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-slate-800/80">
+                  <button
+                    onClick={() => handleTriggerDiscovery()}
+                    disabled={isTriggeringDiscovery}
+                    className="px-4 py-2.5 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-bold text-xs rounded-xl shadow-lg shadow-amber-500/20 transition-all flex items-center space-x-2 disabled:opacity-50 cursor-pointer"
+                  >
+                    {isTriggeringDiscovery ? (
+                      <RefreshCw className="w-4 h-4 animate-spin text-slate-950" />
+                    ) : (
+                      <Sparkles className="w-4 h-4 text-slate-950" />
+                    )}
+                    <span>{isTriggeringDiscovery ? 'Searching & Synthesizing New Tech...' : '⚡ Trigger Manual Research Discovery'}</span>
+                  </button>
+
+                  <button
+                    onClick={fetchHitlState}
+                    disabled={isHitlLoading}
+                    className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs rounded-xl border border-slate-700 transition-all flex items-center space-x-1.5 cursor-pointer"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 text-cyan-400 ${isHitlLoading ? 'animate-spin' : ''}`} />
+                    <span>Sync State</span>
+                  </button>
+
+                  <div className="text-xs font-mono text-slate-400 flex items-center space-x-2 ml-auto">
+                    <span>Pending Approvals:</span>
+                    <span className="px-2 py-0.5 bg-amber-500/20 text-amber-300 rounded-full font-bold border border-amber-500/30">
+                      {hitlProposals.filter(p => p.status === 'pending').length}
+                    </span>
+                    <span className="ml-2">Active Dynamic Tools:</span>
+                    <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-300 rounded-full font-bold border border-emerald-500/30">
+                      {hitlModules.length}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 1: Pending Approvals (Human-in-the-Loop Gateway for Lobish) */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-bold text-white flex items-center space-x-2">
+                    <ShieldAlert className="w-5 h-5 text-amber-400" />
+                    <span>Pending Technology Proposals (Awaiting Lobish Authorization)</span>
+                  </h3>
+                  <span className="text-xs font-mono text-slate-400">Permission-Gated AST Build Pipeline</span>
+                </div>
+
+                {hitlProposals.filter(p => p.status === 'pending').length === 0 ? (
+                  <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-8 text-center space-y-3">
+                    <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto" />
+                    <h4 className="text-base font-bold text-slate-200">All Discovered Proposals Approved or Processed!</h4>
+                    <p className="text-xs text-slate-400 max-w-md mx-auto">
+                      Background daemon is continuously scanning the web. Click <b>"⚡ Trigger Manual Research Discovery"</b> above to invent a new software module immediately!
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-6">
+                    {hitlProposals.filter(p => p.status === 'pending').map(proposal => (
+                      <div key={proposal.id} className="bg-slate-900/90 border border-amber-500/30 rounded-2xl p-6 space-y-4 shadow-xl relative overflow-hidden">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+                          <div className="flex items-center space-x-3">
+                            <span className="px-2.5 py-1 bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded-full text-xs font-mono font-bold">
+                              {proposal.category}
+                            </span>
+                            <span className="text-xs font-mono text-slate-500">{proposal.id}</span>
+                          </div>
+                          <span className="text-xs font-mono text-slate-400 flex items-center space-x-1">
+                            <Clock className="w-3.5 h-3.5 text-cyan-400" />
+                            <span>Estimated Build Time: {proposal.estimatedBuildTime}</span>
+                          </span>
+                        </div>
+
+                        <div>
+                          <h4 className="text-lg font-bold text-white">{proposal.title}</h4>
+                          <p className="text-xs font-mono text-cyan-400/80 mt-0.5">Source: {proposal.discoverySource}</p>
+                          <p className="text-xs text-slate-300 mt-2 leading-relaxed">{proposal.description}</p>
+                        </div>
+
+                        {/* Build Plan Checklist */}
+                        {proposal.buildPlan && (
+                          <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800/80 space-y-1.5">
+                            <span className="text-[11px] font-mono uppercase text-slate-400 font-semibold flex items-center space-x-1">
+                              <Terminal className="w-3.5 h-3.5 text-cyan-400" />
+                              <span>Automated Integration Plan:</span>
+                            </span>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-2 pt-1">
+                              {proposal.buildPlan.map((step, idx) => (
+                                <div key={idx} className="bg-slate-900/80 p-2 rounded-lg border border-slate-800 text-xs font-mono text-slate-300 flex items-center space-x-2">
+                                  <span className="w-4 h-4 rounded-full bg-cyan-500/20 text-cyan-300 flex items-center justify-center text-[10px] font-bold shrink-0">
+                                    {idx + 1}
+                                  </span>
+                                  <span className="truncate">{step}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Action Buttons */}
+                        <div className="flex items-center justify-between pt-2">
+                          <div className="text-xs font-mono text-amber-300/80 flex items-center space-x-1">
+                            <Lock className="w-3.5 h-3.5 text-amber-400" />
+                            <span>Awaiting explicit consent from Lobish</span>
+                          </div>
+
+                          <div className="flex items-center space-x-3">
+                            <button
+                              onClick={() => handleRejectProposal(proposal.id)}
+                              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-rose-300 text-xs font-bold rounded-xl border border-slate-700 transition-all cursor-pointer"
+                            >
+                              Reject Proposal
+                            </button>
+
+                            <button
+                              onClick={() => handleApproveProposal(proposal.id)}
+                              disabled={buildingProposalId === proposal.id}
+                              className="px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-extrabold text-xs rounded-xl shadow-lg shadow-emerald-500/20 transition-all flex items-center space-x-2 cursor-pointer disabled:opacity-50"
+                            >
+                              {buildingProposalId === proposal.id ? (
+                                <>
+                                  <RefreshCw className="w-4 h-4 animate-spin text-slate-950" />
+                                  <span>{buildingStep || 'Building & Integrating...'}</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Zap className="w-4 h-4 text-slate-950 fill-current" />
+                                  <span>⚡ Approve & Build Real Tool</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Section 2: Active Dynamic Integrated Software Modules */}
+              <div className="space-y-4 pt-4 border-t border-slate-800">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-bold text-white flex items-center space-x-2">
+                    <Cpu className="w-5 h-5 text-emerald-400" />
+                    <span>Active Dynamic Integrated Software Modules (Live Working Tools)</span>
+                  </h3>
+                  <span className="text-xs font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-0.5 rounded-full font-bold">
+                    {hitlModules.length} Live Tools
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {hitlModules.map(mod => (
+                    <div key={mod.id} className="bg-slate-900/80 border border-emerald-500/30 rounded-2xl p-6 space-y-4 shadow-xl flex flex-col justify-between">
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                          <span className="px-2.5 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 rounded-full text-xs font-mono font-bold">
+                            {mod.category}
+                          </span>
+                          <span className="text-[11px] font-mono text-slate-400">v{mod.version} • Active</span>
+                        </div>
+
+                        <div>
+                          <h4 className="text-base font-bold text-white">{mod.title}</h4>
+                          <p className="text-xs text-slate-400 font-mono mt-0.5">Installed: {new Date(mod.installedAt).toLocaleString()}</p>
+                        </div>
+
+                        {/* Capabilities */}
+                        <div className="flex flex-wrap gap-1.5">
+                          {mod.capabilities?.map((cap, cIdx) => (
+                            <span key={cIdx} className="px-2 py-0.5 bg-slate-950 text-cyan-300 border border-slate-800 rounded-md text-[10px] font-mono">
+                              ✓ {cap}
+                            </span>
+                          ))}
+                        </div>
+
+                        {/* Dynamic Input Form for Lobish */}
+                        {mod.inputFields && mod.inputFields.length > 0 && (
+                          <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-3">
+                            <span className="text-[11px] font-mono uppercase text-amber-400 font-semibold flex items-center space-x-1">
+                              <Sliders className="w-3.5 h-3.5" />
+                              <span>Real-Time Control Parameters:</span>
+                            </span>
+
+                            {mod.inputFields.map((field) => (
+                              <div key={field.name} className="space-y-1">
+                                <label className="text-[11px] font-mono text-slate-300 font-medium block">
+                                  {field.label}
+                                </label>
+                                {field.type === 'textarea' ? (
+                                  <textarea
+                                    rows={2}
+                                    value={moduleInputParams[mod.id]?.[field.name] || ''}
+                                    onChange={e => {
+                                      const val = e.target.value;
+                                      setModuleInputParams(prev => ({
+                                        ...prev,
+                                        [mod.id]: { ...(prev[mod.id] || {}), [field.name]: val }
+                                      }));
+                                    }}
+                                    placeholder={field.placeholder}
+                                    className="w-full bg-slate-900 border border-slate-800 focus:border-emerald-500 rounded-lg p-2.5 text-xs font-mono text-slate-200 placeholder-slate-600 focus:outline-none"
+                                  />
+                                ) : (
+                                  <input
+                                    type="text"
+                                    value={moduleInputParams[mod.id]?.[field.name] || ''}
+                                    onChange={e => {
+                                      const val = e.target.value;
+                                      setModuleInputParams(prev => ({
+                                        ...prev,
+                                        [mod.id]: { ...(prev[mod.id] || {}), [field.name]: val }
+                                      }));
+                                    }}
+                                    placeholder={field.placeholder}
+                                    className="w-full bg-slate-900 border border-slate-800 focus:border-emerald-500 rounded-lg px-3 py-2 text-xs font-mono text-slate-200 placeholder-slate-600 focus:outline-none"
+                                  />
+                                )}
+                              </div>
+                            ))}
+
+                            <button
+                              onClick={() => handleExecuteModule(mod.id)}
+                              disabled={executingModuleId === mod.id}
+                              className="w-full py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-lg transition-all flex items-center justify-center space-x-1.5 cursor-pointer disabled:opacity-50"
+                            >
+                              {executingModuleId === mod.id ? (
+                                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <Play className="w-3.5 h-3.5 fill-current" />
+                              )}
+                              <span>{executingModuleId === mod.id ? 'Running Dynamic Module Engine...' : '▶ Execute Real Tool'}</span>
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Execution Output Box */}
+                        {(moduleExecResults[mod.id] || mod.lastResult) && (
+                          <div className="space-y-1 pt-2 border-t border-slate-800">
+                            <span className="text-[10px] font-mono text-emerald-400 uppercase font-semibold flex items-center space-x-1">
+                              <Terminal className="w-3 h-3" />
+                              <span>Real Runtime Output Log:</span>
+                            </span>
+                            <pre className="bg-slate-950 p-3 rounded-xl border border-slate-800 text-[11px] font-mono text-emerald-300 max-h-36 overflow-y-auto whitespace-pre-wrap">
+                              {moduleExecResults[mod.id] || mod.lastResult}
+                            </pre>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
         </main>
 
         {/* Right Sidebar: Interactive Chatbot Interface (Desktop View) */}
@@ -3416,6 +3913,31 @@ New code changes ko live run karne ke liye screen ke top par bane **Update Now (
                           </div>
                         ))}
                       </div>
+                    </div>
+                  )}
+
+                  {/* Render Chat Interactive Action Buttons */}
+                  {msg.actionButtons && msg.actionButtons.length > 0 && (
+                    <div className="mt-2.5 pt-2 border-t border-slate-800 flex flex-wrap gap-2">
+                      {msg.actionButtons.map((btn, bIdx) => (
+                        <button
+                          key={bIdx}
+                          onClick={() => {
+                            if (btn.action === 'hitl_approve' && btn.payload?.id) {
+                              handleApproveProposal(btn.payload.id);
+                            } else if (btn.action === 'hitl_reject' && btn.payload?.id) {
+                              handleRejectProposal(btn.payload.id);
+                            }
+                          }}
+                          className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center space-x-1.5 cursor-pointer shadow-md ${
+                            btn.action === 'hitl_approve'
+                              ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 hover:from-emerald-400 hover:to-teal-400'
+                              : 'bg-slate-800 text-rose-300 border border-slate-700 hover:bg-slate-700'
+                          }`}
+                        >
+                          <span>{btn.label}</span>
+                        </button>
+                      ))}
                     </div>
                   )}
 

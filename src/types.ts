@@ -37,6 +37,33 @@ export interface AttachedFile {
   textContent?: string; // plain text content for txt, json, csv, code, md
 }
 
+export interface HITLProposal {
+  id: string;
+  title: string;
+  category: 'AI Engine' | 'Security Shield' | 'Voice Synthesis' | 'Autonomous Code Mutator' | 'Scraper & Crawler' | 'Neural Tool';
+  description: string;
+  discoverySource: string;
+  buildPlan: string[];
+  status: 'pending' | 'approved' | 'rejected' | 'building' | 'integrated';
+  createdAt: string;
+  estimatedBuildTime: string;
+  capabilities: string[];
+  toolCodeSnippet?: string;
+  inputFields?: { name: string; label: string; placeholder: string; type: 'text' | 'textarea' | 'select' }[];
+}
+
+export interface DynamicIntegratedModule {
+  id: string;
+  title: string;
+  category: string;
+  version: string;
+  status: 'active' | 'updating' | 'disabled';
+  capabilities: string[];
+  installedAt: string;
+  inputFields?: { name: string; label: string; placeholder: string; type: 'text' | 'textarea' | 'select' }[];
+  lastResult?: string;
+}
+
 export interface ChatMessage {
   id: string;
   sender: 'user' | 'assistant' | 'system' | 'agent';
@@ -46,6 +73,7 @@ export interface ChatMessage {
   scanResult?: ScanReport;
   attachments?: AttachedFile[];
   actionButtons?: { label: string; action: string; payload?: any }[];
+  proposalData?: HITLProposal;
   isStreaming?: boolean;
 }
 
