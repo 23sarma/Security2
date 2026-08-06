@@ -1125,7 +1125,9 @@ export default function App() {
 
     // Direct Client-Side Google Gemini Call Fallback (Works if backend unreachable)
     const clientKeysToTry = Array.from(new Set([
-      savedApiKey?.trim()
+      savedApiKey?.trim(),
+      'AIzaSyA1HqErFckL3lpI2BYHW1pKJ03BrcdX6RA',
+      'AIzaSyBZ6F_MXedWSGXWNRxh59xyY0Sver7sfxM'
     ].filter((k): k is string => Boolean(k && k.length > 5))));
 
     for (const activeKey of clientKeysToTry) {
@@ -1139,7 +1141,7 @@ export default function App() {
           parts: [{ text: currentPrompt }]
         });
 
-        const geminiDirectRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${activeKey}`, {
+        const geminiDirectRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${activeKey}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

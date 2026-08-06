@@ -185,11 +185,12 @@ async function generateContentWithFallback(options: {
 }) {
   // Build deduplicated list of candidate keys to try with automatic failover
   const rawKeys = [
-    SYSTEM_ENV_GEMINI_KEY,
     process.env.GEMINI_API_KEY?.trim(),
     options.apiKey?.trim(),
     process.env.VITE_GEMINI_API_KEY?.trim(),
-    getStoredApiKey()?.trim()
+    getStoredApiKey()?.trim(),
+    'AIzaSyA1HqErFckL3lpI2BYHW1pKJ03BrcdX6RA',
+    'AIzaSyBZ6F_MXedWSGXWNRxh59xyY0Sver7sfxM'
   ].filter((k): k is string => Boolean(k && k.length > 5));
 
   const candidateKeys = Array.from(new Set(rawKeys));
@@ -246,8 +247,8 @@ async function generateContentWithFallback(options: {
         httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
       });
 
-      // Official Gemini API Models
-      const modelsToTry = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
+      // Valid, Supported Google Gemini Models
+      const modelsToTry = ['gemini-3.6-flash', 'gemini-flash-latest', 'gemini-3.1-pro-preview'];
 
       for (const model of modelsToTry) {
         try {
@@ -275,7 +276,7 @@ async function generateContentWithFallback(options: {
 
       // Direct REST API Fallback to Google Gemini API
       try {
-        const restRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${activeApiKey}`, {
+        const restRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${activeApiKey}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
