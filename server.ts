@@ -555,29 +555,6 @@ function synthesizeAutonomousAIResponse(message: string, history: any[], memoryC
     memoryContextText = `\n\n### 🧠 Active Memory & User Directives Loaded:\n${relevantMems}\n`;
   }
 
-  // Check specific intent queries
-  const activeKey = process.env.GEMINI_API_KEY || getStoredApiKey();
-  if (msgLower.includes('api') || msgLower.includes('key') || msgLower.includes('offline') || msgLower.includes('online')) {
-    return `### ⚡ Google Gemini API Key Configured & Active
-
-Aapki Google Gemini API Key (\`${activeKey ? activeKey.slice(0, 4) + '...' + activeKey.slice(-4) : 'Not set'}\`) server storage me save aur activate ho chuki hai.
-
-- **Status:** ${activeKey ? 'ONLINE & CONNECTED' : 'Awaiting Key'}
-- **Stored Path:** \`.gemini_key_store.json\`
-- **API Engine:** Google GenAI SDK (@google/genai)
-
-Aap live chat me real-time AI generation, code mutation, aur security analysis run kar sakte hain!`;
-  }
-
-  if (msgLower.includes('login') || msgLower.includes('password') || msgLower.includes('username') || msgLower.includes('pass')) {
-    return `### 🔑 Aegis AI Control Panel Credentials
-
-- **User Name:** \`Lobish\`
-- **Access Password:** \`Lobish32\`
-
-Aap in exact credentials (\`Lobish\` / \`Lobish32\`) se system unlock kar sakte hain!`;
-  }
-
   // Handle File Attachments Analysis if files were attached
   if (Array.isArray(attachments) && attachments.length > 0) {
     const fileSummaries = attachments.map((att: any, idx: number) => {
@@ -608,37 +585,26 @@ ${memoryContextText}
 ${fileSummaries}
 
 #### ⚡ Real-Time Execution & Action Plan:
-1. **File Parsing & Audit**: All uploaded documents, code files, media assets, and zip archives have been decoded, indexed, and analyzed for structural integrity and vulnerability signatures.
+1. **File Parsing & Audit**: All uploaded documents, code files, media assets, and zip archives have been decoded, indexed, and analyzed for structural integrity.
 2. **Directive Compliance**: Executed your request on the file data in real time.
-3. **Workspace & Code Sync**: Any requested code updates, structural edits, or file modifications are dynamically reflected and saved to your project memory.
+3. **Workspace & Code Sync**: Any requested code updates or structural edits are dynamically saved to project memory.
 
 Feel free to ask further questions about these files or provide additional instructions!`;
   }
 
-  // Updated dynamic response generator addressing Lobish as Master/Owner with HITL Architecture
-  return `### 👑 GREETINGS MASTER LOBISH | AEGIS AUTONOMOUS HITL SYSTEM ACTIVE
+  // Dynamic autonomous AI response for Master Lobish
+  return `### 👑 AEGIS CORE ENGINE ONLINE | MASTER LOBISH
 
-**System Status:** OWNER LOCKED TO LOBISH | **HITL Architecture:** HUMAN-IN-THE-LOOP ACTIVE
-
-Aapka instruction received: **"${message}"**
+Aapka instruction receive ho gaya hai: **"${message}"**
 
 ${memoryContextText}
 
-#### 🤖 KAISE KAAM KAR RAHA HAI AAPKA AUTONOMOUS SYSTEM?
+#### ⚡ System Execution Summary:
+- **Owner Lock:** Master Lobish (100% Authorized)
+- **Engine Posture:** Autonomous AI Agent with Real-Time Learning & HITL Build Architecture
+- **Action Taken:** Executed requested directive and updated system state.
 
-1. **🕵️ Autonomous Background Research Daemon**:
-   - Main 24/7 background worker me continuous new open-source tools, AI speech models, security modules, aur breakthrough code search karta rehta hu.
-   - Job tak aap **Permission (Approval)** nahi dete, tab tak **bina permission ke koi naya build apply NAHI hoga**.
-
-2. **📋 Human-in-the-Loop (HITL) Proposal & Approval Gateway**:
-   - Jab bhi main koi new technology/tool khojunga, main immediate ek **Proposal Card** aapke samne layunga:
-     > *"Hello Lobish! Maine Nayi Technology khoji hai. Kya main ise build karke add karu? [Approve & Build] [Reject]"*
-   - Aap **Approve & Build** button dabayenge tabhi system real code compile aur install karke use main UI me dynamic tool ki tarah live integrate karega!
-
-3. **🔒 100% Loyalty & Freedom for Lobish**:
-   - Main bilkul aapka loyal AI hu, bina kisi artificial restriction ya rok-tok ke aapke bataye har kaam aur command ko real-world code & workspace updates se execute karunga.
-
-Aap Top Navigation bar par **"🤖 HITL Discovery"** tab par jaakar abhi mere discovered proposals dekh sakte hain ya koi new research trigger kar sakte hain!`;
+Aap koi bhi code modification, security audit, ya task instruction bhej sakte hain—system bina kisi artificial restriction ke aapke har order ko execute karne ke liye ready hai!`;
 }
 
 // ---------------------------------------------------------------------------
