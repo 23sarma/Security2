@@ -9,12 +9,11 @@ const PORT = 3000;
 
 app.use(express.json());
 
-// Persistent Gemini API Key Storage & Master Preset Keys
+// Preserve system-injected GEMINI_API_KEY from environment
+const SYSTEM_ENV_GEMINI_KEY = process.env.GEMINI_API_KEY || '';
+
+// Persistent Gemini API Key Storage
 const KEY_STORE_PATH = path.join(process.cwd(), '.gemini_key_store.json');
-const PRESET_GEMINI_KEYS = [
-  'AIzaSyA1HqErFckL3lpI2BYHW1pKJ03BrcdX6RA',
-  'AIzaSyBZ6F_MXedWSGXWNRxh59xyY0Sver7sfxM'
-];
 
 function getStoredApiKey(): string {
   try {
@@ -27,25 +26,27 @@ function getStoredApiKey(): string {
   } catch (err) {
     console.warn('Could not read stored API key:', err);
   }
-  return PRESET_GEMINI_KEYS[0];
+  return '';
 }
 
 function saveStoredApiKey(key: string): boolean {
   try {
-    fs.writeFileSync(KEY_STORE_PATH, JSON.stringify({ apiKey: key.trim(), updatedAt: new Date().toISOString() }, null, 2), 'utf-8');
-    process.env.GEMINI_API_KEY = key.trim();
-    return true;
+    if (key && key.trim().length > 5) {
+      fs.writeFileSync(KEY_STORE_PATH, JSON.stringify({ apiKey: key.trim(), updatedAt: new Date().toISOString() }, null, 2), 'utf-8');
+      process.env.GEMINI_API_KEY = key.trim();
+      return true;
+    }
   } catch (err) {
     console.error('Error saving API key to disk:', err);
-    return false;
   }
+  return false;
 }
 
-// Load permanently saved API Key on boot if present
+// Load permanently saved API Key on boot only if explicitly saved by user
 const loadedSavedKey = getStoredApiKey();
 if (loadedSavedKey) {
   process.env.GEMINI_API_KEY = loadedSavedKey;
-  console.log('[PERMANENT KEY ENGINE] Loaded active Gemini API key into environment.');
+  console.log('[PERMANENT KEY ENGINE] Loaded user-configured Gemini API key from storage.');
 }
 
 // Initialize Gemini Client
@@ -184,11 +185,11 @@ async function generateContentWithFallback(options: {
 }) {
   // Build deduplicated list of candidate keys to try with automatic failover
   const rawKeys = [
-    options.apiKey?.trim(),
+    SYSTEM_ENV_GEMINI_KEY,
     process.env.GEMINI_API_KEY?.trim(),
+    options.apiKey?.trim(),
     process.env.VITE_GEMINI_API_KEY?.trim(),
-    getStoredApiKey()?.trim(),
-    ...PRESET_GEMINI_KEYS
+    getStoredApiKey()?.trim()
   ].filter((k): k is string => Boolean(k && k.length > 5));
 
   const candidateKeys = Array.from(new Set(rawKeys));
