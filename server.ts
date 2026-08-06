@@ -1747,6 +1747,28 @@ app.post('/api/swarm/spawn', (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// Authentication Endpoint
+// ---------------------------------------------------------------------------
+app.post('/api/auth/login', (req, res) => {
+  const { name, password } = req.body || {};
+  const cleanName = (name || '').trim().toLowerCase();
+  const cleanPass = (password || '').trim();
+
+  if (cleanName === 'lobish' && cleanPass === 'Lobish32') {
+    return res.json({
+      success: true,
+      message: 'Authentication successful. Welcome Master Lobish!',
+      user: { name: 'Lobish', role: 'System Owner' }
+    });
+  }
+
+  return res.status(401).json({
+    success: false,
+    error: 'Incorrect credentials! User Name must be "Lobish" and Access Password must be "Lobish32".'
+  });
+});
+
+// ---------------------------------------------------------------------------
 // HITL (Human-in-the-Loop) Dynamic API Endpoints
 // ---------------------------------------------------------------------------
 app.get('/api/hitl/state', (req, res) => {
