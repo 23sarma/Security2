@@ -247,8 +247,8 @@ async function generateContentWithFallback(options: {
         httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
       });
 
-      // Valid, Supported Google Gemini Models
-      const modelsToTry = ['gemini-3.6-flash', 'gemini-flash-latest', 'gemini-3.1-pro-preview'];
+      // Standard Valid Google Gemini Models supported by GoogleGenAI SDK
+      const modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
 
       for (const model of modelsToTry) {
         try {
@@ -276,7 +276,7 @@ async function generateContentWithFallback(options: {
 
       // Direct REST API Fallback to Google Gemini API
       try {
-        const restRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${activeApiKey}`, {
+        const restRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${activeApiKey}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

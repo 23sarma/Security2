@@ -1123,75 +1123,71 @@ export default function App() {
       console.warn('Backend API endpoint unreachable, attempting direct Google Gemini API call...', err);
     }
 
-    // Direct Client-Side Google Gemini Call Fallback (Works if backend unreachable)
+    // Direct Client-Side Google Gemini Call Fallback (Works on Vercel static deployment)
     const clientKeysToTry = Array.from(new Set([
       savedApiKey?.trim(),
       'AIzaSyA1HqErFckL3lpI2BYHW1pKJ03BrcdX6RA',
       'AIzaSyBZ6F_MXedWSGXWNRxh59xyY0Sver7sfxM'
     ].filter((k): k is string => Boolean(k && k.length > 5))));
 
+    const clientModelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+
     for (const activeKey of clientKeysToTry) {
-      try {
-        const formattedContents = messages.slice(-10).map(m => ({
-          role: m.sender === 'user' ? 'user' : 'model',
-          parts: [{ text: m.content }]
-        }));
-        formattedContents.push({
-          role: 'user',
-          parts: [{ text: currentPrompt }]
-        });
+      for (const modelAlias of clientModelsToTry) {
+        try {
+          const formattedContents = messages.slice(-10).map(m => ({
+            role: m.sender === 'user' ? 'user' : 'model',
+            parts: [{ text: m.content }]
+          }));
+          formattedContents.push({
+            role: 'user',
+            parts: [{ text: currentPrompt }]
+          });
 
-        const geminiDirectRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${activeKey}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: formattedContents,
-            systemInstruction: {
-              parts: [{ text: "You are Aegis Core AI, an advanced AI assistant created for Master Lobish. Provide thorough, intelligent, and helpful responses in clear Hindustani/English." }]
+          const geminiDirectRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelAlias}:generateContent?key=${activeKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: formattedContents,
+              systemInstruction: {
+                parts: [{ text: "You are Aegis Core AI, an advanced AI assistant created for Master Lobish. Provide thorough, intelligent, and helpful responses in clear Hindustani/English." }]
+              }
+            })
+          });
+
+          if (geminiDirectRes.ok) {
+            const geminiData = await geminiDirectRes.json();
+            const aiText = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (aiText) {
+              localStorage.setItem('aegis_gemini_api_key', activeKey);
+              const assistantMsg: ChatMessage = {
+                id: `ast-direct-${Date.now()}`,
+                sender: 'assistant',
+                agentName: 'Aegis Core AI (Gemini Live Engine)',
+                content: aiText,
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+              };
+              setMessages(prev => [...prev, assistantMsg]);
+              setIsChatLoading(false);
+              scrollToBottom(true);
+              return;
             }
-          })
-        });
-
-        if (geminiDirectRes.ok) {
-          const geminiData = await geminiDirectRes.json();
-          const aiText = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (aiText) {
-            localStorage.setItem('aegis_gemini_api_key', activeKey);
-            const assistantMsg: ChatMessage = {
-              id: `ast-direct-${Date.now()}`,
-              sender: 'assistant',
-              agentName: 'Aegis Core AI (Direct Engine Online)',
-              content: aiText,
-              timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-            };
-            setMessages(prev => [...prev, assistantMsg]);
-            setIsChatLoading(false);
-            scrollToBottom(true);
-            return;
+          } else {
+            const errBody = await geminiDirectRes.json().catch(() => ({}));
+            console.warn(`Direct Gemini API Notice (${modelAlias}):`, errBody);
           }
-        } else {
-          const errBody = await geminiDirectRes.json().catch(() => ({}));
-          console.warn('Direct Gemini API Call Key Warning:', errBody);
+        } catch (directErr) {
+          console.error(`Direct client Gemini API execution failed (${modelAlias}):`, directErr);
         }
-      } catch (directErr) {
-        console.error('Direct client Gemini API execution failed:', directErr);
       }
     }
 
-    // High-availability autonomous response fallback
+    // Explicit status message if connection fails
     const fallbackMsg: ChatMessage = {
       id: `ast-resilient-${Date.now()}`,
       sender: 'assistant',
-      agentName: 'Aegis Core AI (Online)',
-      content: `### 👑 Aegis Core Engine Online | Master Lobish
-
-Aapka message processed ho gaya hai: **"${currentPrompt}"**
-
-- **System Status:** ONLINE & CONNECTED
-- **Owner Lock:** Master Lobish
-- **Engine Mode:** Real-Time AI Generation & System Workspace Synchronization
-
-Aap koi bhi code, security audit, ya AI task bina kisi rukawat ke execute kar sakte hain!`,
+      agentName: 'Aegis Core AI System',
+      content: `⚠️ **Gemini API Key Connection Notice**\n\nDirect Gemini API call connect nahi ho paya. Please verify that your Google Gemini API key is active in your Google AI Studio console.\n\nKey Update karne ke liye upper Key icon click karke naya Key paste karein.`,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
     setMessages(prev => [...prev, fallbackMsg]);
