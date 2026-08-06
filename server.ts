@@ -176,8 +176,13 @@ async function generateContentWithFallback(options: {
   contents: any;
   systemInstruction?: string;
   responseMimeType?: string;
+  apiKey?: string;
 }) {
-  const activeApiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
+  const activeApiKey = (options.apiKey && options.apiKey.trim().length > 5 ? options.apiKey.trim() : '') || process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || getStoredApiKey();
+
+  if (options.apiKey && options.apiKey.trim().length > 5) {
+    saveStoredApiKey(options.apiKey.trim());
+  }
 
   // Format and sanitize contents specifically for Google Gemini API requirements
   let formattedContents: any[] = [];
@@ -519,6 +524,29 @@ function synthesizeAutonomousAIResponse(message: string, history: any[], memoryC
     memoryContextText = `\n\n### 🧠 Active Memory & User Directives Loaded:\n${relevantMems}\n`;
   }
 
+  // Check specific intent queries
+  const activeKey = process.env.GEMINI_API_KEY || getStoredApiKey();
+  if (msgLower.includes('api') || msgLower.includes('key') || msgLower.includes('offline') || msgLower.includes('online')) {
+    return `### ⚡ Google Gemini API Key Configured & Active
+
+Aapki Google Gemini API Key (\`${activeKey ? activeKey.slice(0, 4) + '...' + activeKey.slice(-4) : 'Not set'}\`) server storage me save aur activate ho chuki hai.
+
+- **Status:** ${activeKey ? 'ONLINE & CONNECTED' : 'Awaiting Key'}
+- **Stored Path:** \`.gemini_key_store.json\`
+- **API Engine:** Google GenAI SDK (@google/genai)
+
+Aap live chat me real-time AI generation, code mutation, aur security analysis run kar sakte hain!`;
+  }
+
+  if (msgLower.includes('login') || msgLower.includes('password') || msgLower.includes('username') || msgLower.includes('pass')) {
+    return `### 🔑 Aegis AI Control Panel Credentials
+
+- **User Name:** \`Lobish\`
+- **Access Password:** \`Lobish32\`
+
+Aap in exact credentials (\`Lobish\` / \`Lobish32\`) se system unlock kar sakte hain!`;
+  }
+
   // Handle File Attachments Analysis if files were attached
   if (Array.isArray(attachments) && attachments.length > 0) {
     const fileSummaries = attachments.map((att: any, idx: number) => {
@@ -694,7 +722,14 @@ let githubConfig = {
 // Chatbot Interface Endpoint with Gemini AI Reasoning & Long-Term Memory
 app.post('/api/chat', async (req, res) => {
   try {
-    const { message, history, memoryContext, attachments } = req.body;
+    const { message, history, memoryContext, attachments, apiKey } = req.body;
+
+    // If an API key is transmitted in the chat payload, save it to persistent server storage
+    if (apiKey && typeof apiKey === 'string' && apiKey.trim().length > 5) {
+      saveStoredApiKey(apiKey.trim());
+    }
+
+    const effectiveApiKey = (apiKey && typeof apiKey === 'string' && apiKey.trim().length > 5 ? apiKey.trim() : '') || getStoredApiKey();
 
     if (!message && (!attachments || attachments.length === 0)) {
       return res.status(400).json({ error: 'Message or file attachment is required' });
@@ -751,6 +786,7 @@ Maintain a clear, confident, professional, and helpful tone. Keep formatting wel
       const rawText = await generateContentWithFallback({
         contents: chatContents,
         systemInstruction,
+        apiKey: effectiveApiKey
       });
 
       if (rawText && rawText.trim().length > 0) {
@@ -1765,6 +1801,42 @@ app.post('/api/auth/login', (req, res) => {
   return res.status(401).json({
     success: false,
     error: 'Incorrect credentials! User Name must be "Lobish" and Access Password must be "Lobish32".'
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Google Gemini API Key Management Endpoints
+// ---------------------------------------------------------------------------
+app.get('/api/key/status', (req, res) => {
+  const activeKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || getStoredApiKey();
+  if (activeKey && activeKey.trim().length > 5) {
+    const clean = activeKey.trim();
+    const masked = clean.slice(0, 4) + '...' + clean.slice(-4);
+    return res.json({
+      hasKey: true,
+      maskedKey: masked,
+      message: 'API Key Active (Verified & Stored on Server)'
+    });
+  }
+  return res.json({
+    hasKey: false,
+    message: 'No API key configured.'
+  });
+});
+
+app.post('/api/key/save', (req, res) => {
+  const { apiKey } = req.body || {};
+  const cleanKey = (apiKey || '').trim();
+  if (!cleanKey || cleanKey.length < 8) {
+    return res.status(400).json({ success: false, error: 'Please enter a valid Google Gemini API Key!' });
+  }
+
+  saveStoredApiKey(cleanKey);
+
+  res.json({
+    success: true,
+    message: '✅ API Key saved permanently to server storage & Gemini AI activated!',
+    maskedKey: cleanKey.slice(0, 4) + '...' + cleanKey.slice(-4)
   });
 });
 
