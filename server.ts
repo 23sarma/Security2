@@ -183,14 +183,12 @@ async function generateContentWithFallback(options: {
   responseMimeType?: string;
   apiKey?: string;
 }) {
-  // Build deduplicated list of candidate keys to try with automatic failover
+  // Build deduplicated list of candidate keys to try with automatic failover (User-provided keys first!)
   const rawKeys = [
-    process.env.GEMINI_API_KEY?.trim(),
     options.apiKey?.trim(),
-    process.env.VITE_GEMINI_API_KEY?.trim(),
     getStoredApiKey()?.trim(),
-    'AIzaSyA1HqErFckL3lpI2BYHW1pKJ03BrcdX6RA',
-    'AIzaSyBZ6F_MXedWSGXWNRxh59xyY0Sver7sfxM'
+    process.env.GEMINI_API_KEY?.trim(),
+    process.env.VITE_GEMINI_API_KEY?.trim()
   ].filter((k): k is string => Boolean(k && k.length > 5));
 
   const candidateKeys = Array.from(new Set(rawKeys));
@@ -248,7 +246,7 @@ async function generateContentWithFallback(options: {
       });
 
       // Standard Valid Google Gemini Models supported by GoogleGenAI SDK
-      const modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
+      const modelsToTry = ['gemini-3.6-flash', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
 
       for (const model of modelsToTry) {
         try {
@@ -256,7 +254,7 @@ async function generateContentWithFallback(options: {
           if (options.systemInstruction) config.systemInstruction = options.systemInstruction;
           if (options.responseMimeType) config.responseMimeType = options.responseMimeType;
 
-          console.log(`[GEMINI SERVER CONNECTING] Requesting Google Gemini model: ${model} with key (${activeApiKey.slice(0, 6)}...)...`);
+          console.log(`[GEMINI SERVER CONNECTING] Requesting Google Gemini model: ${model} with key (${activeApiKey.slice(0, 8)}...)...`);
           const response = await dynamicAi.models.generateContent({
             model,
             contents: formattedContents,
@@ -274,27 +272,42 @@ async function generateContentWithFallback(options: {
         }
       }
 
-      // Direct REST API Fallback to Google Gemini API
-      try {
-        const restRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${activeApiKey}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: formattedContents,
-            systemInstruction: options.systemInstruction ? { parts: [{ text: options.systemInstruction }] } : undefined
-          })
-        });
-        if (restRes.ok) {
-          const restData = await restRes.json();
-          const text = restData?.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (text) {
-            console.log('[GEMINI REST FALLBACK SUCCESS] Direct REST API responded');
-            saveStoredApiKey(activeApiKey);
-            return text;
+      // Direct REST API Fallback supporting both query parameter key and x-goog-api-key / Bearer authorization headers
+      const restModels = ['gemini-3.6-flash', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+      for (const restModel of restModels) {
+        try {
+          const headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+            'x-goog-api-key': activeApiKey
+          };
+          if (activeApiKey.startsWith('AQ.')) {
+            headers['Authorization'] = `Bearer ${activeApiKey}`;
           }
+
+          const restRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${restModel}:generateContent?key=${encodeURIComponent(activeApiKey)}`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              contents: formattedContents,
+              systemInstruction: options.systemInstruction ? { parts: [{ text: options.systemInstruction }] } : undefined
+            })
+          });
+
+          if (restRes.ok) {
+            const restData = await restRes.json();
+            const text = restData?.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (text) {
+              console.log(`[GEMINI REST FALLBACK SUCCESS] Direct REST API (${restModel}) responded successfully!`);
+              saveStoredApiKey(activeApiKey);
+              return text;
+            }
+          } else {
+            const errRes = await restRes.text().catch(() => '');
+            console.warn(`[GEMINI REST NOTICE] ${restModel} returned ${restRes.status}: ${errRes.slice(0, 120)}`);
+          }
+        } catch (restErr) {
+          console.warn(`Gemini REST API fallback failed for key (${activeApiKey.slice(0, 6)}...):`, restErr);
         }
-      } catch (restErr) {
-        console.warn('Gemini REST API fallback failed for key:', restErr);
       }
     } catch (sdkInitErr: any) {
       console.error('[GEMINI SDK INIT ERROR]:', sdkInitErr?.message || sdkInitErr);

@@ -1126,11 +1126,10 @@ export default function App() {
     // Direct Client-Side Google Gemini Call Fallback (Works on Vercel static deployment)
     const clientKeysToTry = Array.from(new Set([
       savedApiKey?.trim(),
-      'AIzaSyA1HqErFckL3lpI2BYHW1pKJ03BrcdX6RA',
-      'AIzaSyBZ6F_MXedWSGXWNRxh59xyY0Sver7sfxM'
+      (import.meta as any).env?.VITE_GEMINI_API_KEY?.trim()
     ].filter((k): k is string => Boolean(k && k.length > 5))));
 
-    const clientModelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+    const clientModelsToTry = ['gemini-3.6-flash', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
 
     for (const activeKey of clientKeysToTry) {
       for (const modelAlias of clientModelsToTry) {
@@ -1144,9 +1143,17 @@ export default function App() {
             parts: [{ text: currentPrompt }]
           });
 
-          const geminiDirectRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelAlias}:generateContent?key=${activeKey}`, {
+          const headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+            'x-goog-api-key': activeKey
+          };
+          if (activeKey.startsWith('AQ.')) {
+            headers['Authorization'] = `Bearer ${activeKey}`;
+          }
+
+          const geminiDirectRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelAlias}:generateContent?key=${encodeURIComponent(activeKey)}`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers,
             body: JSON.stringify({
               contents: formattedContents,
               systemInstruction: {
