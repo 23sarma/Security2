@@ -1124,7 +1124,13 @@ export default function App() {
     }
 
     // Direct Client-Side Google Gemini Call Fallback (Works on Vercel & static hosting without backend)
-    if (savedApiKey && savedApiKey.trim().length > 5) {
+    const clientKeysToTry = Array.from(new Set([
+      savedApiKey?.trim(),
+      'AIzaSyA1HqErFckL3lpI2BYHW1pKJ03BrcdX6RA',
+      'AIzaSyBZ6F_MXedWSGXWNRxh59xyY0Sver7sfxM'
+    ].filter((k): k is string => Boolean(k && k.length > 5))));
+
+    for (const activeKey of clientKeysToTry) {
       try {
         const formattedContents = messages.slice(-10).map(m => ({
           role: m.sender === 'user' ? 'user' : 'model',
@@ -1135,7 +1141,7 @@ export default function App() {
           parts: [{ text: currentPrompt }]
         });
 
-        const geminiDirectRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${savedApiKey.trim()}`, {
+        const geminiDirectRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${activeKey}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1150,6 +1156,7 @@ export default function App() {
           const geminiData = await geminiDirectRes.json();
           const aiText = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text;
           if (aiText) {
+            localStorage.setItem('aegis_gemini_api_key', activeKey);
             const assistantMsg: ChatMessage = {
               id: `ast-direct-${Date.now()}`,
               sender: 'assistant',
@@ -1164,7 +1171,7 @@ export default function App() {
           }
         } else {
           const errBody = await geminiDirectRes.json().catch(() => ({}));
-          console.error('Direct Gemini API Call Error:', errBody);
+          console.warn('Direct Gemini API Call Key Warning:', errBody);
         }
       } catch (directErr) {
         console.error('Direct client Gemini API execution failed:', directErr);

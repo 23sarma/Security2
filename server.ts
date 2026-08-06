@@ -9,21 +9,25 @@ const PORT = 3000;
 
 app.use(express.json());
 
-// Persistent Gemini API Key Storage File Path
+// Persistent Gemini API Key Storage & Master Preset Keys
 const KEY_STORE_PATH = path.join(process.cwd(), '.gemini_key_store.json');
+const PRESET_GEMINI_KEYS = [
+  'AIzaSyA1HqErFckL3lpI2BYHW1pKJ03BrcdX6RA',
+  'AIzaSyBZ6F_MXedWSGXWNRxh59xyY0Sver7sfxM'
+];
 
 function getStoredApiKey(): string {
   try {
     if (fs.existsSync(KEY_STORE_PATH)) {
       const data = JSON.parse(fs.readFileSync(KEY_STORE_PATH, 'utf-8'));
-      if (data && data.apiKey && typeof data.apiKey === 'string') {
+      if (data && data.apiKey && typeof data.apiKey === 'string' && data.apiKey.trim().length > 5) {
         return data.apiKey.trim();
       }
     }
   } catch (err) {
     console.warn('Could not read stored API key:', err);
   }
-  return '';
+  return PRESET_GEMINI_KEYS[0];
 }
 
 function saveStoredApiKey(key: string): boolean {
@@ -41,7 +45,7 @@ function saveStoredApiKey(key: string): boolean {
 const loadedSavedKey = getStoredApiKey();
 if (loadedSavedKey) {
   process.env.GEMINI_API_KEY = loadedSavedKey;
-  console.log('[PERMANENT KEY ENGINE] Loaded saved Gemini API key from server storage.');
+  console.log('[PERMANENT KEY ENGINE] Loaded active Gemini API key into environment.');
 }
 
 // Initialize Gemini Client
@@ -178,7 +182,16 @@ async function generateContentWithFallback(options: {
   responseMimeType?: string;
   apiKey?: string;
 }) {
-  const activeApiKey = (options.apiKey && options.apiKey.trim().length > 5 ? options.apiKey.trim() : '') || process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || getStoredApiKey();
+  // Build deduplicated list of candidate keys to try with automatic failover
+  const rawKeys = [
+    options.apiKey?.trim(),
+    process.env.GEMINI_API_KEY?.trim(),
+    process.env.VITE_GEMINI_API_KEY?.trim(),
+    getStoredApiKey()?.trim(),
+    ...PRESET_GEMINI_KEYS
+  ].filter((k): k is string => Boolean(k && k.length > 5));
+
+  const candidateKeys = Array.from(new Set(rawKeys));
 
   if (options.apiKey && options.apiKey.trim().length > 5) {
     saveStoredApiKey(options.apiKey.trim());
@@ -224,8 +237,8 @@ async function generateContentWithFallback(options: {
     formattedContents = [{ role: 'user', parts: [{ text: 'Hello Gemini' }] }];
   }
 
-  // 1. Primary: Direct Google Gemini Server Integration via GoogleGenAI SDK
-  if (activeApiKey) {
+  // 1. Primary: Direct Google Gemini Server Integration via GoogleGenAI SDK & Multi-Key Rotation
+  for (const activeApiKey of candidateKeys) {
     try {
       const dynamicAi = new GoogleGenAI({
         apiKey: activeApiKey,
@@ -241,7 +254,7 @@ async function generateContentWithFallback(options: {
           if (options.systemInstruction) config.systemInstruction = options.systemInstruction;
           if (options.responseMimeType) config.responseMimeType = options.responseMimeType;
 
-          console.log(`[GEMINI SERVER CONNECTING] Requesting Google Gemini model: ${model}...`);
+          console.log(`[GEMINI SERVER CONNECTING] Requesting Google Gemini model: ${model} with key (${activeApiKey.slice(0, 6)}...)...`);
           const response = await dynamicAi.models.generateContent({
             model,
             contents: formattedContents,
@@ -250,11 +263,12 @@ async function generateContentWithFallback(options: {
 
           if (response && response.text) {
             console.log(`[GEMINI SERVER SUCCESS] Received response from Google Gemini model: ${model}`);
+            saveStoredApiKey(activeApiKey);
             return response.text;
           }
         } catch (err: any) {
           const errMsg = err?.message || String(err);
-          console.warn(`[GEMINI MODEL NOTICE] Model ${model} notice (${errMsg.slice(0, 100)}), trying next model...`);
+          console.warn(`[GEMINI MODEL NOTICE] Model ${model} key notice (${errMsg.slice(0, 100)}), trying next model/key...`);
         }
       }
 
@@ -273,17 +287,16 @@ async function generateContentWithFallback(options: {
           const text = restData?.candidates?.[0]?.content?.parts?.[0]?.text;
           if (text) {
             console.log('[GEMINI REST FALLBACK SUCCESS] Direct REST API responded');
+            saveStoredApiKey(activeApiKey);
             return text;
           }
         }
       } catch (restErr) {
-        console.warn('Gemini REST API fallback failed:', restErr);
+        console.warn('Gemini REST API fallback failed for key:', restErr);
       }
     } catch (sdkInitErr: any) {
       console.error('[GEMINI SDK INIT ERROR]:', sdkInitErr?.message || sdkInitErr);
     }
-  } else {
-    console.warn('[GEMINI SERVER NOTICE] GEMINI_API_KEY environment variable not detected, falling back to public AI gateway...');
   }
 
   // 2. Fallback: Auto-Connect to Multi-Provider Public AI Gateway
