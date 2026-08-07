@@ -999,29 +999,36 @@ app.post('/api/github/config', (req, res) => {
 
 // Verify & Fetch GitHub User Profile
 app.get('/api/github/user', async (req, res) => {
-  const token = req.headers['x-github-token'] || githubConfig.token;
+  const rawToken = (req.headers['x-github-token'] as string) || githubConfig.token || '';
+  const token = rawToken.trim();
   if (!token) {
     return res.status(400).json({ connected: false, error: 'GitHub Personal Access Token is required.' });
   }
 
   try {
     const fetch = (await import('node-fetch')).default;
+    const authHeader = token.startsWith('github_pat_') ? `Bearer ${token}` : `token ${token}`;
+
     const response = await fetch('https://api.github.com/user', {
       headers: {
-        'Authorization': `token ${token}`,
+        'Authorization': authHeader,
         'User-Agent': 'Aegis-AI-Autonomous-Engine',
         'Accept': 'application/vnd.github.v3+json'
       }
     });
 
     if (!response.ok) {
-      const errData: any = await response.json();
-      return res.status(response.status).json({ connected: false, error: errData.message || 'GitHub Authentication Failed.' });
+      const errData: any = await response.json().catch(() => ({}));
+      return res.status(response.status).json({
+        connected: false,
+        error: errData.message || `GitHub Authentication Failed (${response.status}). Check token permissions or expiration.`
+      });
     }
 
     const userData: any = await response.json();
-    if (userData.login && !githubConfig.owner) {
+    if (userData.login) {
       githubConfig.owner = userData.login;
+      githubConfig.token = token;
     }
 
     res.json({
@@ -1041,30 +1048,34 @@ app.get('/api/github/user', async (req, res) => {
 
 // List Repositories
 app.get('/api/github/repos', async (req, res) => {
-  const token = req.headers['x-github-token'] || githubConfig.token;
+  const rawToken = (req.headers['x-github-token'] as string) || githubConfig.token || '';
+  const token = rawToken.trim();
   if (!token) {
     return res.status(400).json({ error: 'GitHub token required.' });
   }
 
   try {
     const fetch = (await import('node-fetch')).default;
-    const response = await fetch('https://api.github.com/user/repos?sort=updated&per_page=30', {
+    const authHeader = token.startsWith('github_pat_') ? `Bearer ${token}` : `token ${token}`;
+
+    const response = await fetch('https://api.github.com/user/repos?sort=updated&per_page=50', {
       headers: {
-        'Authorization': `token ${token}`,
+        'Authorization': authHeader,
         'User-Agent': 'Aegis-AI-Autonomous-Engine',
         'Accept': 'application/vnd.github.v3+json'
       }
     });
 
     if (!response.ok) {
-      return res.status(response.status).json({ error: 'Failed to fetch repositories.' });
+      const errData: any = await response.json().catch(() => ({}));
+      return res.status(response.status).json({ error: errData.message || 'Failed to fetch repositories.' });
     }
 
     const repos: any = await response.json();
     const formatted = Array.isArray(repos) ? repos.map((r: any) => ({
       name: r.name,
       full_name: r.full_name,
-      owner: r.owner.login,
+      owner: r.owner?.login || '',
       private: r.private,
       html_url: r.html_url,
       default_branch: r.default_branch || 'main'
@@ -1078,9 +1089,10 @@ app.get('/api/github/repos', async (req, res) => {
 
 // Fetch Commits for active repo
 app.get('/api/github/commits', async (req, res) => {
-  const token = req.headers['x-github-token'] || githubConfig.token;
-  const owner = req.query.owner || githubConfig.owner;
-  const repo = req.query.repo || githubConfig.repo;
+  const rawToken = (req.headers['x-github-token'] as string) || githubConfig.token || '';
+  const token = rawToken.trim();
+  const owner = ((req.query.owner as string) || githubConfig.owner || '').trim();
+  const repo = ((req.query.repo as string) || githubConfig.repo || '').trim();
 
   if (!token || !owner || !repo) {
     return res.status(400).json({ error: 'GitHub token, owner, and repository name are required.' });
@@ -1088,24 +1100,27 @@ app.get('/api/github/commits', async (req, res) => {
 
   try {
     const fetch = (await import('node-fetch')).default;
+    const authHeader = token.startsWith('github_pat_') ? `Bearer ${token}` : `token ${token}`;
+
     const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/commits?per_page=10`, {
       headers: {
-        'Authorization': `token ${token}`,
+        'Authorization': authHeader,
         'User-Agent': 'Aegis-AI-Autonomous-Engine',
         'Accept': 'application/vnd.github.v3+json'
       }
     });
 
     if (!response.ok) {
-      return res.status(response.status).json({ error: 'Failed to fetch commit history for target repository.' });
+      const errData: any = await response.json().catch(() => ({}));
+      return res.status(response.status).json({ error: errData.message || `Could not find repository '${owner}/${repo}'. Check repo name or PAT permissions.` });
     }
 
     const commitsData: any = await response.json();
     const commits = Array.isArray(commitsData) ? commitsData.map((c: any) => ({
-      sha: c.sha.substring(0, 7),
-      message: c.commit.message,
-      author: c.commit.author.name,
-      date: c.commit.author.date,
+      sha: c.sha?.substring(0, 7) || 'head',
+      message: c.commit?.message || 'Commit update',
+      author: c.commit?.author?.name || owner,
+      date: c.commit?.author?.date || new Date().toISOString(),
       html_url: c.html_url
     })) : [];
 
@@ -1117,8 +1132,13 @@ app.get('/api/github/commits', async (req, res) => {
 
 // Direct Commit & Sync Endpoint (Code, Memory, and AI Updates to GitHub)
 app.post('/api/github/commit-sync', async (req, res) => {
-  const { path: filePath = 'AEGIS_AI_MEMORY.md', message: commitMsg = 'Auto-sync from Aegis AI Engine', content, owner = githubConfig.owner, repo = githubConfig.repo, branch = githubConfig.branch || 'main' } = req.body;
-  const token = req.headers['x-github-token'] || githubConfig.token;
+  const { path: filePath = 'AEGIS_AI_MEMORY.md', message: commitMsg = 'Auto-sync from Aegis AI Engine', content, owner: reqOwner, repo: reqRepo, branch: reqBranch } = req.body;
+  
+  const rawToken = (req.headers['x-github-token'] as string) || githubConfig.token || '';
+  const token = rawToken.trim();
+  const owner = (reqOwner || githubConfig.owner || '').trim();
+  const repo = (reqRepo || githubConfig.repo || '').trim();
+  const branch = (reqBranch || githubConfig.branch || 'main').trim();
 
   if (!token || !owner || !repo) {
     return res.status(400).json({ error: 'GitHub Token, Owner, and Repo must be configured.' });
@@ -1126,13 +1146,14 @@ app.post('/api/github/commit-sync', async (req, res) => {
 
   try {
     const fetch = (await import('node-fetch')).default;
+    const authHeader = token.startsWith('github_pat_') ? `Bearer ${token}` : `token ${token}`;
     const url = `https://api.github.com/repos/${owner}/${repo}/contents/${filePath}`;
 
     // Step 1: Check if file already exists to obtain SHA
     let existingSha = '';
     const checkRes = await fetch(`${url}?ref=${branch}`, {
       headers: {
-        'Authorization': `token ${token}`,
+        'Authorization': authHeader,
         'User-Agent': 'Aegis-AI-Autonomous-Engine',
         'Accept': 'application/vnd.github.v3+json'
       }
@@ -1153,13 +1174,13 @@ app.post('/api/github/commit-sync', async (req, res) => {
     const commitRes = await fetch(url, {
       method: 'PUT',
       headers: {
-        'Authorization': `token ${token}`,
+        'Authorization': authHeader,
         'User-Agent': 'Aegis-AI-Autonomous-Engine',
         'Accept': 'application/vnd.github.v3+json',
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        message: commitMsg,
+        message: commitMsg || `Autonomous update for ${filePath}`,
         content: base64Content,
         branch: branch,
         ...(existingSha ? { sha: existingSha } : {})
@@ -1167,8 +1188,10 @@ app.post('/api/github/commit-sync', async (req, res) => {
     });
 
     if (!commitRes.ok) {
-      const errObj: any = await commitRes.json();
-      return res.status(commitRes.status).json({ error: errObj.message || 'GitHub Commit Failed.' });
+      const errObj: any = await commitRes.json().catch(() => ({}));
+      return res.status(commitRes.status).json({
+        error: errObj.message || `GitHub Push Failed (${commitRes.status}). Verify '${owner}/${repo}' exists and token has 'repo' scope permissions.`
+      });
     }
 
     const commitResult: any = await commitRes.json();

@@ -484,7 +484,7 @@ export default function App() {
   const [loginError, setLoginError] = useState<string | null>(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
-  // Permanent Server-Side Gemini API Key Management State
+  // Permanent Server-Side AI Key Management State
   const [apiKeyStatus, setApiKeyStatus] = useState<{ hasKey: boolean; maskedKey: string; message: string }>({
     hasKey: false,
     maskedKey: '',
@@ -586,7 +586,7 @@ export default function App() {
     setApiKeySuccessMsg(null);
     const cleanKey = (inputApiKey || '').trim();
     if (!cleanKey || cleanKey.length < 8) {
-      setApiKeyErrorMsg('Please enter a valid Google Gemini API Key!');
+      setApiKeyErrorMsg('Please enter a valid Aegis AI Access Key!');
       return;
     }
     setIsSavingKey(true);
@@ -719,42 +719,58 @@ export default function App() {
   };
 
   const verifyGithubToken = async (tokenStr: string) => {
-    if (!tokenStr) return;
+    const cleanToken = (tokenStr || '').trim();
+    if (!cleanToken) return;
     setIsGithubLoading(true);
     try {
       const res = await fetch('/api/github/user', {
-        headers: { 'x-github-token': tokenStr }
+        headers: { 'x-github-token': cleanToken }
       });
       const data = await res.json();
       if (data.connected && data.user) {
         setGithubUser(data.user);
-        if (!githubOwner) setGithubOwner(data.user.login);
-        localStorage.setItem('aegis_github_token', tokenStr);
-        localStorage.setItem('aegis_github_owner', data.user.login);
+        const ownerToUse = githubOwner.trim() || data.user.login;
+        if (!githubOwner) setGithubOwner(ownerToUse);
+        
+        localStorage.setItem('aegis_github_token', cleanToken);
+        localStorage.setItem('aegis_github_owner', ownerToUse);
+        localStorage.setItem('aegis_github_repo', githubRepo.trim());
+
         // Also save config on server
         await fetch('/api/github/config', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token: tokenStr, owner: data.user.login, repo: githubRepo, branch: githubBranch })
+          body: JSON.stringify({
+            token: cleanToken,
+            owner: ownerToUse,
+            repo: githubRepo.trim(),
+            branch: githubBranch.trim() || 'main'
+          })
         });
-        fetchGithubRepos(tokenStr);
-        if (githubRepo) {
-          fetchGithubCommits(tokenStr, data.user.login, githubRepo);
+
+        fetchGithubRepos(cleanToken);
+        if (githubRepo.trim()) {
+          fetchGithubCommits(cleanToken, ownerToUse, githubRepo.trim());
         }
+        setGithubSyncStatusMsg(`✅ Connected to GitHub as @${data.user.login}`);
       } else {
         setGithubUser(null);
+        setGithubSyncStatusMsg(`❌ Connection Failed: ${data.error || 'Invalid PAT Token'}`);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to verify GitHub token', err);
+      setGithubSyncStatusMsg(`❌ Connection Error: ${err?.message || 'Network error'}`);
     } finally {
       setIsGithubLoading(false);
     }
   };
 
   const fetchGithubRepos = async (tokenStr: string) => {
+    const cleanToken = (tokenStr || '').trim();
+    if (!cleanToken) return;
     try {
       const res = await fetch('/api/github/repos', {
-        headers: { 'x-github-token': tokenStr }
+        headers: { 'x-github-token': cleanToken }
       });
       const data = await res.json();
       if (Array.isArray(data.repos)) {
@@ -766,14 +782,20 @@ export default function App() {
   };
 
   const fetchGithubCommits = async (tokenStr: string, ownerStr: string, repoStr: string) => {
-    if (!ownerStr || !repoStr) return;
+    const cleanToken = (tokenStr || '').trim();
+    const cleanOwner = (ownerStr || '').trim();
+    const cleanRepo = (repoStr || '').trim();
+    if (!cleanToken || !cleanOwner || !cleanRepo) return;
+
     try {
-      const res = await fetch(`/api/github/commits?owner=${ownerStr}&repo=${repoStr}`, {
-        headers: { 'x-github-token': tokenStr }
+      const res = await fetch(`/api/github/commits?owner=${encodeURIComponent(cleanOwner)}&repo=${encodeURIComponent(cleanRepo)}`, {
+        headers: { 'x-github-token': cleanToken }
       });
       const data = await res.json();
       if (Array.isArray(data.commits)) {
         setGithubCommits(data.commits);
+      } else if (data.error) {
+        console.warn('GitHub Commits warning:', data.error);
       }
     } catch (err) {
       console.error('Failed to fetch GitHub commits', err);
@@ -782,52 +804,74 @@ export default function App() {
 
   const handleSaveGithubSettings = async (e: React.FormEvent) => {
     e.preventDefault();
-    localStorage.setItem('aegis_github_token', githubToken);
-    localStorage.setItem('aegis_github_owner', githubOwner);
-    localStorage.setItem('aegis_github_repo', githubRepo);
-    setGithubSyncStatusMsg('Saving configuration & verifying GitHub access token...');
-    await verifyGithubToken(githubToken);
-    setGithubSyncStatusMsg('✅ GitHub connection configuration updated!');
-    setTimeout(() => setGithubSyncStatusMsg(''), 4000);
+    const cleanToken = githubToken.trim();
+    const cleanOwner = githubOwner.trim();
+    const cleanRepo = githubRepo.trim();
+    const cleanBranch = githubBranch.trim() || 'main';
+
+    setGithubToken(cleanToken);
+    setGithubOwner(cleanOwner);
+    setGithubRepo(cleanRepo);
+    setGithubBranch(cleanBranch);
+
+    localStorage.setItem('aegis_github_token', cleanToken);
+    localStorage.setItem('aegis_github_owner', cleanOwner);
+    localStorage.setItem('aegis_github_repo', cleanRepo);
+
+    if (!cleanToken) {
+      setGithubSyncStatusMsg('⚠️ Please enter a GitHub Personal Access Token (PAT).');
+      return;
+    }
+
+    setGithubSyncStatusMsg('Verifying GitHub token & owner repository access...');
+    await verifyGithubToken(cleanToken);
+    setTimeout(() => setGithubSyncStatusMsg(''), 6000);
   };
 
   const handleExecuteGithubCommitSync = async () => {
-    if (!githubToken || !githubOwner || !githubRepo) {
-      alert('Please enter your GitHub Token, Owner, and Repository name first.');
+    const cleanToken = githubToken.trim();
+    const cleanOwner = githubOwner.trim();
+    const cleanRepo = githubRepo.trim();
+    const cleanBranch = githubBranch.trim() || 'main';
+
+    if (!cleanToken || !cleanOwner || !cleanRepo) {
+      setGithubSyncStatusMsg('⚠️ Missing details! Please enter GitHub PAT Token, Owner, and Repo name.');
       return;
     }
+
     setIsGithubLoading(true);
-    setGithubSyncStatusMsg('🚀 Executing direct commit & push to GitHub repository...');
+    setGithubSyncStatusMsg(`🚀 Pushing commit to GitHub (${cleanOwner}/${cleanRepo} on '${cleanBranch}')...`);
+
     try {
       const res = await fetch('/api/github/commit-sync', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-github-token': githubToken
+          'x-github-token': cleanToken
         },
         body: JSON.stringify({
           path: 'AEGIS_AI_MEMORY.md',
-          message: customCommitMsg || 'Auto-sync memory & security code updates from Aegis AI',
-          owner: githubOwner,
-          repo: githubRepo,
-          branch: githubBranch
+          message: customCommitMsg.trim() || 'Auto-sync code & neural memories from Aegis AI Engine',
+          owner: cleanOwner,
+          repo: cleanRepo,
+          branch: cleanBranch
         })
       });
 
       const data = await res.json();
       if (data.success) {
         setGithubSyncStatusMsg(`🎉 ${data.message}`);
-        fetchGithubCommits(githubToken, githubOwner, githubRepo);
+        fetchGithubCommits(cleanToken, cleanOwner, cleanRepo);
         setBgLearningLogs(prev => [
-          `[${new Date().toLocaleTimeString()}] 🐙 GitHub Sync Executed: Direct commit ${data.commitSha?.substring(0, 7) || ''} pushed to ${githubOwner}/${githubRepo}`,
+          `[${new Date().toLocaleTimeString()}] 🐙 GitHub Sync Executed: Direct commit ${data.commitSha?.substring(0, 7) || ''} pushed to ${cleanOwner}/${cleanRepo}`,
           ...prev
         ]);
         fetchMemory();
       } else {
-        setGithubSyncStatusMsg(`❌ GitHub Commit Failed: ${data.error || 'Unknown error'}`);
+        setGithubSyncStatusMsg(`❌ GitHub Push Rejected: ${data.error || 'Check repository permissions'}`);
       }
     } catch (err: any) {
-      setGithubSyncStatusMsg(`❌ Commit Error: ${err?.message || 'Server connection issue'}`);
+      setGithubSyncStatusMsg(`❌ Connection Error: ${err?.message || 'Server unreachable'}`);
     } finally {
       setIsGithubLoading(false);
     }
@@ -1194,7 +1238,7 @@ export default function App() {
       id: `ast-resilient-${Date.now()}`,
       sender: 'assistant',
       agentName: 'Aegis Core AI System',
-      content: `⚠️ **Gemini API Key Connection Notice**\n\nDirect Gemini API call connect nahi ho paya. Please verify that your Google Gemini API key is active in your Google AI Studio console.\n\nKey Update karne ke liye upper Key icon click karke naya Key paste karein.`,
+      content: `⚠️ **Aegis AI Engine Connection Notice**\n\nDirect AI engine call connect nahi ho paya. Please verify that your Aegis AI key is active.\n\nKey Update karne ke liye upper Key icon click karke naya Key paste karein.`,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
     setMessages(prev => [...prev, fallbackMsg]);
@@ -1518,7 +1562,7 @@ export default function App() {
             }`}
           >
             <Globe className="w-3.5 h-3.5" />
-            <span>Google Hub</span>
+            <span>Aegis System Hub</span>
           </button>
           <button
             id="tab-github"
@@ -1572,7 +1616,7 @@ export default function App() {
             <span className="hidden sm:inline">Install App (PWA/APK)</span>
           </button>
 
-          {/* Permanent Gemini API Key Quick Access Button */}
+          {/* Permanent AI Key Quick Access Button */}
           <button
             onClick={() => setShowApiKeyModal(true)}
             className={`px-3 py-1.5 rounded-xl text-xs font-semibold font-mono flex items-center space-x-1.5 transition-all border ${
@@ -1580,11 +1624,11 @@ export default function App() {
                 ? 'bg-emerald-500/10 hover:bg-emerald-500/20 border-emerald-500/30 text-emerald-300'
                 : 'bg-amber-500/20 hover:bg-amber-500/30 border-amber-500/50 text-amber-300 font-bold animate-pulse'
             }`}
-            title="Configure Permanent Gemini API Key"
+            title="Configure Aegis AI Access Key"
           >
             <Key className="w-3.5 h-3.5 text-amber-400" />
             <span className="hidden md:inline">
-              {apiKeyStatus.hasKey ? 'Gemini Key: Active' : 'Paste API Key Once'}
+              {apiKeyStatus.hasKey ? 'AI Engine Key: Active' : 'Paste AI Key Once'}
             </span>
           </button>
 
@@ -1794,7 +1838,7 @@ export default function App() {
                 >
                   <div className="flex items-center space-x-2.5">
                     <Globe className="w-4 h-4" />
-                    <span>🌐 Google System Ecosystem & OAuth</span>
+                    <span>🌐 Aegis Cloud System Ecosystem</span>
                   </div>
                   <ChevronRight className="w-4 h-4 opacity-60" />
                 </button>
@@ -1884,11 +1928,11 @@ export default function App() {
                 <div className="space-y-1 text-[11px] text-slate-400">
                   <div className="flex justify-between">
                     <span>Runtime:</span>
-                    <span className="text-emerald-400">Google Cloud Run</span>
+                    <span className="text-emerald-400">Aegis Cloud Container</span>
                   </div>
                   <div className="flex justify-between">
                     <span>LLM Engine:</span>
-                    <span className="text-cyan-400">Gemini 3.6 Flash</span>
+                    <span className="text-cyan-400">Aegis Neural 3.6</span>
                   </div>
                   <div className="flex justify-between">
                     <span>Memory DB:</span>
@@ -2799,6 +2843,45 @@ export default function App() {
                 </div>
               </div>
 
+              {/* Single Domain Auto-Update Guide */}
+              <div className="bg-gradient-to-r from-purple-900/40 via-slate-900 to-indigo-900/40 border border-purple-500/30 rounded-2xl p-5 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2.5 bg-purple-500/20 text-purple-300 border border-purple-500/30 rounded-xl">
+                      <RefreshCw className="w-5 h-5 animate-spin-slow" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-white flex items-center space-x-2">
+                        <span>⚡ Single-Domain Continuous Auto-Update Shield</span>
+                        <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-300 text-[10px] font-mono rounded-full border border-emerald-500/30">
+                          AUTO-SYNC ACTIVE
+                        </span>
+                      </h3>
+                      <p className="text-xs text-purple-300">Har Naye Update Ke Liye Bar-Bar Naya Link Kholne Ki Zaroorat Nahi Hai!</p>
+                    </div>
+                  </div>
+                </div>
+
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  Jab aap Vercel ya live link par apna app deploy karte hain, toh <strong>Production Custom Domain / Main Branch Domain</strong> assign kar lene se aapka <strong>ek hi fixed link (<code className="text-cyan-300 font-mono">my-aegis-app.vercel.app</code>)</strong> hamesha active rehta hai. Jab bhi AI new updates trigger karega ya commit push karega, usi link par aapko direct latest version milta rahega!
+                </p>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs pt-1">
+                  <div className="bg-slate-950/80 p-3.5 rounded-xl border border-purple-500/20 space-y-1">
+                    <span className="font-bold text-purple-300 font-mono">1. GitHub Main Branch Sync</span>
+                    <p className="text-slate-400">GitHub tab par apna repository connect karke branch <code className="text-purple-300">main</code> set karein.</p>
+                  </div>
+                  <div className="bg-slate-950/80 p-3.5 rounded-xl border border-purple-500/20 space-y-1">
+                    <span className="font-bold text-purple-300 font-mono">2. Vercel Production Link</span>
+                    <p className="text-slate-400">Vercel project settings mein <code className="text-purple-300">Production Branch: main</code> lock karein.</p>
+                  </div>
+                  <div className="bg-slate-950/80 p-3.5 rounded-xl border border-purple-500/20 space-y-1">
+                    <span className="font-bold text-emerald-400 font-mono">3. Automatic Auto-Refresh</span>
+                    <p className="text-slate-400">Har push par aapka single primary link automatically refresh and update ho jata hai!</p>
+                  </div>
+                </div>
+              </div>
+
               {/* Vercel & Netlify Deploy Options */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Vercel Card */}
@@ -2886,27 +2969,27 @@ export default function App() {
             </div>
           )}
 
-          {/* Active Tab: Google Ecosystem Hub */}
+          {/* Active Tab: Aegis Ecosystem Hub */}
           {activeTab === 'google' && (
             <div className="space-y-6">
               <div className="border-b border-slate-800 pb-4">
                 <h2 className="text-xl font-bold text-white flex items-center space-x-2">
                   <Globe className="w-6 h-6 text-indigo-400" />
-                  <span>🌐 Google Ecosystem & Infrastructure Hub</span>
+                  <span>🌐 Aegis Infrastructure & AI Hub</span>
                 </h2>
                 <p className="text-xs text-slate-400 mt-1">
-                  Complete integration with Google Cloud Run, Google Gemini AI, Google OAuth, and Google Security Command Center standards.
+                  Complete integration with Aegis Container Runtime, Aegis Autonomous AI Engine, and Cloud Security Standards.
                 </p>
               </div>
 
-              {/* Google System Architecture Status Cards */}
+              {/* System Architecture Status Cards */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* Google Gemini AI */}
+                {/* Aegis AI Engine */}
                 <div className="bg-slate-900/80 border border-indigo-500/30 rounded-2xl p-5 space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-2.5">
                       <Sparkles className="w-5 h-5 text-indigo-400" />
-                      <h3 className="font-bold text-sm text-white">Google Gemini 3.6 Flash</h3>
+                      <h3 className="font-bold text-sm text-white">Aegis Neural 3.6 Engine</h3>
                     </div>
                     <span className="px-2 py-0.5 bg-indigo-500/20 text-indigo-300 rounded text-[10px] font-mono">CONNECTED</span>
                   </div>
@@ -2914,38 +2997,38 @@ export default function App() {
                     Powering autonomous vulnerability reasoning, multi-turn AI security chat, and sub-agent generation.
                   </p>
                   <div className="text-[11px] font-mono text-indigo-300 bg-slate-950 p-2 rounded-lg border border-slate-800">
-                    SDK: @google/genai (Server Proxy Mode)
+                    SDK: Aegis AI Engine Proxy
                   </div>
                 </div>
 
-                {/* Google Cloud Run */}
+                {/* Aegis Cloud Container */}
                 <div className="bg-slate-900/80 border border-emerald-500/30 rounded-2xl p-5 space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-2.5">
                       <Server className="w-5 h-5 text-emerald-400" />
-                      <h3 className="font-bold text-sm text-white">Google Cloud Run</h3>
+                      <h3 className="font-bold text-sm text-white">Aegis Cloud Sandbox</h3>
                     </div>
                     <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-300 rounded text-[10px] font-mono">RUNNING</span>
                   </div>
                   <p className="text-xs text-slate-400">
-                    Serverless container execution on Google infrastructure bound to port 3000 with instant auto-scaling.
+                    Serverless container execution on enterprise infrastructure bound to port 3000 with instant auto-scaling.
                   </p>
                   <div className="text-[11px] font-mono text-emerald-300 bg-slate-950 p-2 rounded-lg border border-slate-800">
-                    Region: Asia-Southeast1 (Cloud Run Container)
+                    Region: Asia-Pacific (Cloud Container)
                   </div>
                 </div>
 
-                {/* Google Workspace & OAuth */}
+                {/* Identity & Access */}
                 <div className="bg-slate-900/80 border border-cyan-500/30 rounded-2xl p-5 space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-2.5">
                       <User className="w-5 h-5 text-cyan-400" />
-                      <h3 className="font-bold text-sm text-white">Google OAuth & Identity</h3>
+                      <h3 className="font-bold text-sm text-white">Aegis Identity & OAuth</h3>
                     </div>
                     <span className="px-2 py-0.5 bg-cyan-500/20 text-cyan-300 rounded text-[10px] font-mono">AUTHENTICATED</span>
                   </div>
                   <p className="text-xs text-slate-400">
-                    User account linked securely for Google Workspace APIs & Google Cloud Security controls.
+                    User account linked securely for system APIs & Cloud Security controls.
                   </p>
                   <div className="text-[11px] font-mono text-cyan-300 bg-slate-950 p-2 rounded-lg border border-slate-800 truncate">
                     User: lobish12sarma@gmail.com
@@ -2953,11 +3036,11 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Google Security Command Center Benchmark Alignment */}
+              {/* Aegis Security Command Benchmarks */}
               <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 space-y-4">
                 <h3 className="text-sm font-bold text-white flex items-center space-x-2">
                   <ShieldCheck className="w-5 h-5 text-cyan-400" />
-                  <span>Google Cloud Security Command Center (SCC) Benchmarks</span>
+                  <span>Aegis Cloud Security Benchmarks</span>
                 </h3>
 
                 <div className="space-y-2 text-xs">
@@ -2965,7 +3048,7 @@ export default function App() {
                     { rule: 'OWASP API Security Top 10 Auditing', status: 'Active & Verified' },
                     { rule: 'Container Image Vulnerability Scanning', status: 'Active & Verified' },
                     { rule: 'Content-Security-Policy & SameSite Header Enforcer', status: 'Active & Verified' },
-                    { rule: 'Serverless Auto-recovery & Gemini Fallback Engine', status: 'Active & Verified' }
+                    { rule: 'Serverless Auto-recovery & AI Fallback Engine', status: 'Active & Verified' }
                   ].map((item, idx) => (
                     <div key={idx} className="bg-slate-950 p-3 rounded-xl border border-slate-800/80 flex items-center justify-between font-mono">
                       <span className="text-slate-300">• {item.rule}</span>
@@ -4754,7 +4837,7 @@ export default function App() {
                 <KeyRound className="w-6 h-6" />
               </div>
               <div>
-                <h3 className="text-lg font-bold text-white tracking-tight">1-Time Permanent Gemini API Key Setup</h3>
+                <h3 className="text-lg font-bold text-white tracking-tight">1-Time Aegis AI Key Setup</h3>
                 <p className="text-xs text-slate-400 font-mono">Server Disk Memory Store (.gemini_key_store.json)</p>
               </div>
             </div>
@@ -4762,10 +4845,10 @@ export default function App() {
             <div className="p-3.5 bg-slate-950 border border-slate-800 rounded-2xl text-xs space-y-2 text-slate-300">
               <p className="text-amber-300 font-bold flex items-center space-x-1.5">
                 <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
-                <span>Bar-Bar API Key Daalne Ki Koi Jarurat Nahi Hai!</span>
+                <span>Bar-Bar Key Daalne Ki Koi Jarurat Nahi Hai!</span>
               </p>
               <p className="text-slate-400 text-[11px] leading-relaxed font-sans">
-                Aapne deployment ke time koi API key nahi dali thi. Ab yahan 1 baar apni Google Gemini API Key paste karden. Ye key server disk storage me permanently save ho jayegi. Aap log out ho jayein, mobile reset kar dein, ya re-deploy kar dein — dubara API key nahi daalna padega!
+                Aapne deployment ke time koi API key nahi dali thi. Ab yahan 1 baar apni Aegis AI Engine Key paste karden. Ye key server disk storage me permanently save ho jayegi. Aap log out ho jayein, mobile reset kar dein, ya re-deploy kar dein — dubara key nahi daalna padega!
               </p>
               {apiKeyStatus.hasKey && (
                 <div className="pt-1 flex items-center space-x-2 text-emerald-400 font-mono text-[11px]">
@@ -4792,14 +4875,14 @@ export default function App() {
 
               <div className="space-y-1.5">
                 <label className="text-xs font-mono uppercase text-slate-300 font-semibold flex items-center justify-between">
-                  <span>Google Gemini API Key</span>
+                  <span>Aegis AI Access Key</span>
                   <a
                     href="https://aistudio.google.com/app/apikey"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-[10px] text-cyan-400 hover:underline flex items-center space-x-1"
                   >
-                    <span>Get Free Key</span>
+                    <span>Get Key</span>
                     <ExternalLink className="w-3 h-3" />
                   </a>
                 </label>
