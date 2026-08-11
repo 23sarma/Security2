@@ -1,2 +1,9 @@
-# AEGIS Sentinel
-A lightweight, real-time security monitoring utility designed to detect brute-force or anomalous injection patterns within distributed application environments.
+# Q-Kernel Simulator
+
+This utility provides a robust environment for simulating quantum gates. 
+
+## Usage
+typescript
+const sim = new QubitKernel(2);
+sim.applyHadamard(0);
+const result = sim.measure();
