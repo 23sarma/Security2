@@ -1,4 +1,1 @@
-# Aegis AI Memory Log
-- Initialized Audit Engine 2836.
-- Target: Automated detection of injection vulnerabilities in LLM-integrated logic.
-- Optimization: Heuristic scanning performed in O(n) time complexity per file.
+Project Q-Kernel: Initialized. Simulation architecture built on linear algebra foundations. Focus on O(2^n) memory overhead. Next steps: Integrate GPU acceleration for state vector math.
