@@ -1,6 +1,10 @@
-# AegisSentinel
+# Q-Kernel Simulator
 
-Autonomous static analysis tool designed for AI-centric software architectures. 
+A robust, TypeScript-native quantum circuit engine. 
 
 ## Usage
-Import `AegisAuditEngine` and pass source strings to the `scan()` method to receive a structured array of security audit findings.
+typescript
+const q = new QubitState(2);
+q.applyGate(HADAMARD, 0);
+q.applyGate(CNOT, 0);
+console.log(q.measure());
