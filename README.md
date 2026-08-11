@@ -1,9 +1,8 @@
-# Q-Kernel Simulator
-
-This utility provides a robust environment for simulating quantum gates. 
+# FluxSchema-Sync Engine
 
 ## Usage
 typescript
-const sim = new QubitKernel(2);
-sim.applyHadamard(0);
-const result = sim.measure();
+const engine = new FluxSchemaEngine({ watchDir: './db', outputDir: './types' });
+engine.sync({ tableName: 'users', columns: { id: 'number', name: 'string' }, timestamp: Date.now() });
+
+Provides runtime generation of TypeScript definitions to bridge database schema changes with frontend type-safety.
