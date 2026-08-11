@@ -1,7 +1,9 @@
-# AegisSentinel
+# Sentinel-Flow
+Autonomous behavioral threat detection utility. 
 
-A real-time threat monitoring utility. 
-
-## Usage:
-`const sentinel = new AegisSentinel((alert) => console.log(alert));`
-`sentinel.processEvent({ sourceIp: '192.168.1.1', action: 'LOGIN_FAILURE', severity: 1, timestamp: Date.now() });`
+## Usage
+typescript
+const sentinel = new SentinelFlowDetector(0.7);
+if (sentinel.registerEvent('192.168.1.1')) {
+  console.warn('Anomaly Detected: Potential Bot Pattern');
+}
