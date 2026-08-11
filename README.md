@@ -1,8 +1,7 @@
-# FluxSchema-Bridge
-## Overview
-FluxSchema-Bridge provides an autonomous synchronization layer for full-stack developers, ensuring that your TypeScript interfaces remain in sync with runtime API responses.
+# Real-Time Threat Sentinel 2859
 
-## Features
-- Real-time schema watching.
-- Auto-generation of JSON contract definitions.
-- Cross-environment contract integrity verification.
+## Overview
+A high-performance TypeScript monitoring module for detecting anomalous execution patterns in real-time. It employs a sliding-window heuristic to identify malicious activity based on entropy and resource consumption.
+
+## Usage
+Initialize `ThreatSentinel` and feed `TelemetryPoint` objects periodically.
