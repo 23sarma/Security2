@@ -1,7 +1,7 @@
-# PyFlow-Orchestrator
-Autonomous engine for managing Python automation scripts from a TypeScript control plane.
+# AegisSentinel
 
-## Features
-- Deterministic Task Queuing
-- Exponential Retry Logic
-- STDOUT/STDERR Stream Integration
+A real-time threat monitoring utility. 
+
+## Usage:
+`const sentinel = new AegisSentinel((alert) => console.log(alert));`
+`sentinel.processEvent({ sourceIp: '192.168.1.1', action: 'LOGIN_FAILURE', severity: 1, timestamp: Date.now() });`
