@@ -1,9 +1,8 @@
-# FluxSchema-Orchestrator
+# PyFlow-Orchestrator-7122
 
-## Overview
-Automated bridge between TypeScript domain models and Database DDL. Prevents type-safety drift in full-stack applications.
+Automate Python workflows directly from your Node.js application. 
 
 ## Usage
-1. Point to your domain model file.
-2. Run orchestrator to sync DB state.
-3. Validate with generated Zod schemas.
+1. Initialize Orchestrator.
+2. Define pipeline tasks with dependency arrays.
+3. Run.
