@@ -1,8 +1,7 @@
-# Aegis-Sentinel
+# PyFlow-Engine
+An autonomous module for managing Python scripts in a TypeScript environment. 
 
-A runtime integrity warden designed to detect unauthorized code modification (tampering) in production Node.js environments. 
-
-## Features
-- Hash-based signature verification.
-- Automated violation reporting.
-- Runtime threat response trigger.
+## Usage
+typescript
+const engine = new PythonPipelineOrchestrator();
+await engine.executeTask({ id: 'data_sync', scriptPath: 'sync.py', args: ['--force'], retries: 3 });
