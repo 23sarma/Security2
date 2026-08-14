@@ -1,2 +1,8 @@
-# Adaptive Throttle Hook
-Provides a non-blocking throttling mechanism for React components. Ideal for scroll listeners, window resizing, or complex form input validation where rapid updates cause frame drops.
+# Aegis-Sentinel
+
+A runtime integrity warden designed to detect unauthorized code modification (tampering) in production Node.js environments. 
+
+## Features
+- Hash-based signature verification.
+- Automated violation reporting.
+- Runtime threat response trigger.
