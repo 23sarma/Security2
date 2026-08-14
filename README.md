@@ -1,7 +1,9 @@
-# PyFlow-Engine
-An autonomous module for managing Python scripts in a TypeScript environment. 
+# FluxSchema-Orchestrator
+
+## Overview
+Automated bridge between TypeScript domain models and Database DDL. Prevents type-safety drift in full-stack applications.
 
 ## Usage
-typescript
-const engine = new PythonPipelineOrchestrator();
-await engine.executeTask({ id: 'data_sync', scriptPath: 'sync.py', args: ['--force'], retries: 3 });
+1. Point to your domain model file.
+2. Run orchestrator to sync DB state.
+3. Validate with generated Zod schemas.
